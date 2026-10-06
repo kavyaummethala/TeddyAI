@@ -12,11 +12,25 @@ const DELIVERY: Record<StoryPhase, string> = {
   ending: "The softest, slowest, most soothing voice, as if the child is nearly asleep. Gentle pauses.",
 };
 
+/** Teddy's quick spoken reactions ("Ooh, good one!") need a bright, smiling delivery, never flat. */
+const REPLY_DELIVERY = {
+  lively:
+    "Bright, warm, and delighted, with a big smile in your voice, like a loving parent who is genuinely excited by their child's idea. Upbeat and kind. Never flat, never sarcastic.",
+  calm: "Soft, warm, and gentle, smiling, like a sleepy loving parent. Kind, never flat.",
+};
+
+export type Tone = "story" | "reply";
+
+function deliveryFor(phase: StoryPhase, tone: Tone) {
+  if (tone === "reply") return phase === "interactive" || phase === "settling" ? REPLY_DELIVERY.lively : REPLY_DELIVERY.calm;
+  return DELIVERY[phase];
+}
+
 /**
  * Starts generating narration audio and returns it as a stream of MP3 bytes, so playback can
  * begin after ~1s instead of waiting for the whole segment (which took 5-30s).
  */
-export async function synthesizeStream(text: string, phase: StoryPhase, signal?: AbortSignal) {
+export async function synthesizeStream(text: string, phase: StoryPhase, tone: Tone = "story", signal?: AbortSignal) {
   if (config.tts.provider !== "openai") throw new Error("TTS_PROVIDER=browser: speech happens in the browser");
 
   const res = await fetchWithTimeout(
@@ -28,7 +42,7 @@ export async function synthesizeStream(text: string, phase: StoryPhase, signal?:
         model: "gpt-4o-mini-tts",
         voice: config.tts.voice,
         input: text,
-        instructions: DELIVERY[phase],
+        instructions: deliveryFor(phase, tone),
         response_format: "mp3",
       }),
     },

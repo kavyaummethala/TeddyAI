@@ -370,6 +370,12 @@ textarea::placeholder {
   padding: 24px 16px;
 }
 
+.hint {
+  margin: -12px 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .pill {
   background: rgba(22, 29, 64, 0.7);
   border: 1px solid var(--line);
@@ -391,75 +397,107 @@ textarea::placeholder {
   min-height: 2.6em;
 }
 
-/* The moon button */
-.moon {
-  --size: min(56vw, 230px);
+/* Teddy: the big button. The bear's face shows each state without words. */
+.teddy {
+  --size: min(60vw, 250px);
   --level: 0;
   position: relative;
   width: var(--size);
   height: var(--size);
-  border-radius: 50%;
   border: none;
   padding: 0;
   background: none;
-  color: #3a3270;
+  border-radius: 50%;
   -webkit-tap-highlight-color: transparent;
 }
-.moon:disabled {
+.teddy:disabled {
   cursor: default;
 }
-.moon__face {
+.teddy__glow {
+  position: absolute;
+  inset: -18%;
+  border-radius: 50%;
+  /* A soft halo with no hard edge; dims as Wind Down progresses (--glow). */
+  background: radial-gradient(circle, rgba(246, 231, 176, 0.32) 0%, rgba(246, 231, 176, 0.12) 45%, transparent 68%);
+  opacity: var(--glow);
+}
+.teddy__face {
   position: absolute;
   inset: 0;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: radial-gradient(circle at 35% 30%, #fffbe8, var(--moon) 55%, #d9c78a);
-  box-shadow: 0 0 calc(60px * var(--glow)) calc(10px * var(--glow)) var(--moon-glow);
-  transition: transform 0.2s, box-shadow 0.6s;
+  display: block;
+  transition: transform 0.2s;
 }
-.moon:active .moon__face {
+.teddy:active .teddy__face {
   transform: scale(0.97);
 }
-.moon__ring {
+.bear {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.35));
+}
+.teddy__ring {
   position: absolute;
-  inset: 0;
+  inset: 6%;
   border-radius: 50%;
-  border: 2px solid var(--moon-glow);
+  border: 2px solid rgba(246, 231, 176, 0.45);
   opacity: 0;
 }
 
 /* Ready: gentle breathing so it invites a tap */
-.moon--ready .moon__face {
+.teddy--ready .teddy__face {
   animation: breathe var(--breath) ease-in-out infinite;
 }
-/* Listening: rings react to the child's voice */
-.moon--listening .moon__face {
-  transform: scale(calc(1 + var(--level) * 0.08));
-  box-shadow: 0 0 calc(40px + 60px * var(--level)) calc(8px + 16px * var(--level)) rgba(185, 167, 255, 0.55);
-  transition: transform 0.08s, box-shadow 0.08s;
+/* Listening: ears perk up with the child's voice, rings ripple */
+.bear__ears {
+  transform-box: view-box;
+  transform-origin: 100px 108px;
+  transition: transform 0.08s;
 }
-.moon--listening .moon__ring {
+.teddy--listening .bear__ears {
+  transform: scale(calc(1.05 + var(--level) * 0.1));
+}
+.teddy--listening .teddy__ring {
   border-color: var(--accent);
   animation: ripple 1.8s ease-out infinite;
 }
-.moon--listening .moon__ring--2 {
+.teddy--listening .teddy__ring--2 {
   animation-delay: 0.9s;
 }
-/* Thinking: soft shimmer */
-.moon--thinking .moon__face {
-  animation: breathe 1.6s ease-in-out infinite;
-  filter: saturate(0.8);
+/* Thinking: a curious head tilt (the eyes look up too) */
+.teddy--thinking .teddy__face {
+  animation: tilt 1.6s ease-in-out infinite;
 }
-/* Speaking: slow glow, slower as Wind Down progresses */
-.moon--speaking .moon__face {
+/* Speaking: mouth moves, glow pulses slower as Wind Down progresses */
+.bear__mouth--talking {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: talk 0.32s ease-in-out infinite alternate;
+}
+.teddy--speaking .teddy__glow {
   animation: glow var(--breath) ease-in-out infinite;
 }
-.moon--speaking .moon__ring {
+.teddy--speaking .teddy__ring {
   animation: ripple calc(var(--breath) * 1.2) ease-out infinite;
 }
-.moon--finished .moon__face {
-  filter: brightness(0.7);
+/* Blinking, slower and heavier when sleepy */
+.bear__eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: blink 5s infinite;
+}
+.bear__eyes--sleepy {
+  animation-duration: 3s;
+}
+.teddy--finished .teddy__face {
+  filter: brightness(0.8);
+}
+.bear__zzz text {
+  animation: float 3s ease-in-out infinite;
+}
+.bear__zzz text + text {
+  animation-delay: 0.8s;
 }
 
 @keyframes breathe {
@@ -474,10 +512,10 @@ textarea::placeholder {
 @keyframes glow {
   0%,
   100% {
-    box-shadow: 0 0 calc(40px * var(--glow)) calc(6px * var(--glow)) var(--moon-glow);
+    transform: scale(0.94);
   }
   50% {
-    box-shadow: 0 0 calc(90px * var(--glow)) calc(22px * var(--glow)) var(--moon-glow);
+    transform: scale(1.06);
   }
 }
 @keyframes ripple {
@@ -486,37 +524,178 @@ textarea::placeholder {
     opacity: 0.8;
   }
   to {
-    transform: scale(1.45);
+    transform: scale(1.4);
     opacity: 0;
   }
 }
-
-.dots {
-  display: flex;
-  gap: 8px;
+@keyframes talk {
+  from {
+    transform: scaleY(0.35);
+  }
+  to {
+    transform: scaleY(1);
+  }
 }
-.dots i {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: currentColor;
-  animation: bounce 1.2s ease-in-out infinite;
-}
-.dots i:nth-child(2) {
-  animation-delay: 0.15s;
-}
-.dots i:nth-child(3) {
-  animation-delay: 0.3s;
-}
-@keyframes bounce {
+@keyframes tilt {
   0%,
   100% {
-    opacity: 0.3;
-    transform: translateY(0);
+    transform: rotate(-4deg);
   }
   50% {
-    opacity: 1;
-    transform: translateY(-5px);
+    transform: rotate(4deg);
+  }
+}
+@keyframes blink {
+  0%,
+  94%,
+  100% {
+    transform: scaleY(1);
+  }
+  97% {
+    transform: scaleY(0.1);
+  }
+}
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translateY(-6px);
+    opacity: 0.4;
+  }
+}
+
+/* Sidebar: who tonight's story is for. A drawer on phones, always visible on wide screens. */
+.sidebar {
+  position: fixed;
+  z-index: 20;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 250px;
+  max-width: 82vw;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #0f1533;
+  border-right: 1px solid var(--line);
+  transform: translateX(-100%);
+  transition: transform 0.25s ease;
+}
+.sidebar--open {
+  transform: none;
+}
+.sidebar__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 19;
+  background: rgba(5, 8, 20, 0.6);
+}
+.sidebar__brand {
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 600;
+  color: var(--moon);
+  margin-bottom: 8px;
+}
+.sidebar__brand {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.sidebar__close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.5rem;
+  line-height: 1;
+  padding: 0 4px;
+}
+@media (min-width: 900px) {
+  .sidebar__close {
+    display: none;
+  }
+}
+.sidebar__label {
+  margin: 8px 0 0;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.sidebar__current {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--moon);
+  border-radius: 14px;
+  background: rgba(246, 231, 176, 0.1);
+}
+.sidebar__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sidebar__child {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: var(--text);
+  padding: 8px 10px;
+  text-align: left;
+}
+.sidebar__child:hover {
+  border-color: var(--line);
+  background: var(--card);
+}
+.sidebar__child--add {
+  color: var(--muted);
+  border: 1px dashed var(--line);
+}
+.sidebar__grownups {
+  margin-top: auto;
+  align-self: flex-start;
+}
+.profile__avatar--small {
+  width: 26px;
+  height: 26px;
+  font-size: 0.8rem;
+  flex: none;
+}
+.sidebar-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+  padding: 4px 12px 4px 4px;
+  font-size: 0.9rem;
+}
+@media (min-width: 900px) {
+  .sidebar {
+    transform: none;
+  }
+  .sidebar__backdrop,
+  .sidebar-toggle {
+    display: none;
+  }
+  .story {
+    padding-left: 250px;
+  }
+  .story__top {
+    justify-content: flex-end;
   }
 }
 

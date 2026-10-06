@@ -24,19 +24,25 @@ export function unlockAudio() {
   if ("speechSynthesis" in window) speechSynthesis.speak(new SpeechSynthesisUtterance(""));
 }
 
-export function narrate(text: string, phase: StoryPhase, mode: "server" | "browser"): Narration {
-  return mode === "browser" ? narrateWithBrowser(text, phase) : narrateWithServer(text, phase);
+/** tone "reply" = Teddy's quick, bright reactions ("Ooh, good one!"); "story" = narration. */
+export type Tone = "story" | "reply";
+
+export function narrate(text: string, phase: StoryPhase, mode: "server" | "browser", tone: Tone = "story"): Narration {
+  return mode === "browser" ? narrateWithBrowser(text, phase, tone) : narrateWithServer(text, phase, tone);
 }
 
 /** Streams audio from the backend; the <audio> element starts playing as soon as bytes arrive. */
-function narrateWithServer(text: string, phase: StoryPhase): Narration {
+const streamUrl = (text: string, phase: StoryPhase, tone: Tone) =>
+  `/api/voice/stream?${new URLSearchParams({ text, phase, tone })}`;
+
+function narrateWithServer(text: string, phase: StoryPhase, tone: Tone): Narration {
   let resolveStopped: (v: "stopped") => void = () => {};
 
   const done = new Promise<"completed" | "stopped">((resolve, reject) => {
     resolveStopped = resolve;
     player.onended = () => resolve("completed");
     player.onerror = () => reject(new TtsError("Audio playback failed"));
-    player.src = `/api/voice/stream?${new URLSearchParams({ text, phase })}`;
+    player.src = streamUrl(text, phase, tone);
     player.play().catch((err) => reject(new TtsError(err.message)));
   });
 
@@ -56,25 +62,33 @@ function narrateWithServer(text: string, phase: StoryPhase): Narration {
 // Short, instant acknowledgments played the moment the child finishes talking, so they know
 // Teddy heard them while the next part of the story is being written. After the first use,
 // the browser caches each clip, so they play immediately.
+// Warm and curious, and they fit anything a child might say: an idea, a choice, or a question.
 const QUICK_REPLIES = {
-  lively: ["Ooh!", "Oh, okay!", "Hmm!", "Oh!"],
-  calm: ["Mm, okay.", "Mm-hmm."],
+  lively: ["Ooh!", "Ooh, let me think!", "Ooh, good one!", "Hmm, let's see!"],
+  calm: ["Mmm, let's see.", "Ooh, okay, sweetie."],
 };
+/** What Teddy says when the child calls its name mid-story. */
+const WAKE_REPLY = "Yes?";
 
 export function quickReply(phase: StoryPhase, mode: "server" | "browser"): { text: string; narration: Narration } {
   const options = phase === "interactive" || phase === "settling" ? QUICK_REPLIES.lively : QUICK_REPLIES.calm;
   const text = options[Math.floor(Math.random() * options.length)];
-  return { text, narration: narrate(text, phase, mode) };
+  return { text, narration: narrate(text, phase, mode, "reply") };
+}
+
+/** Teddy answering to its name ("Teddy!" -> "Yes?"). */
+export function wakeReply(phase: StoryPhase, mode: "server" | "browser"): Narration {
+  return narrate(WAKE_REPLY, phase, mode, "reply");
 }
 
 /** Warm the browser cache so the first quick reply is instant too. */
 export function preloadQuickReplies(mode: "server" | "browser") {
   if (mode !== "server") return;
-  const all = [
-    ...QUICK_REPLIES.lively.map((text) => ({ text, phase: "interactive" })),
-    ...QUICK_REPLIES.calm.map((text) => ({ text, phase: "windDown" })),
+  const all: [string, StoryPhase][] = [
+    ...[...QUICK_REPLIES.lively, WAKE_REPLY].map((text): [string, StoryPhase] => [text, "interactive"]),
+    ...[...QUICK_REPLIES.calm, WAKE_REPLY].map((text): [string, StoryPhase] => [text, "windDown"]),
   ];
-  for (const { text, phase } of all) fetch(`/api/voice/stream?${new URLSearchParams({ text, phase })}`).catch(() => {});
+  for (const [text, phase] of all) fetch(streamUrl(text, phase, "reply")).catch(() => {});
 }
 
 const BROWSER_VOICE = { interactive: [0.95, 1.05], settling: [0.9, 1.0], windDown: [0.82, 0.95], ending: [0.78, 0.92] };
@@ -90,7 +104,7 @@ function pickVoice(): SpeechSynthesisVoice | undefined {
   return voices[0];
 }
 
-function narrateWithBrowser(text: string, phase: StoryPhase): Narration {
+function narrateWithBrowser(text: string, phase: StoryPhase, tone: Tone): Narration {
   if (!("speechSynthesis" in window)) {
     return { stop() {}, done: Promise.reject(new TtsError("This browser cannot speak")) };
   }
@@ -99,7 +113,8 @@ function narrateWithBrowser(text: string, phase: StoryPhase): Narration {
   let stopped = false;
   // Chrome cuts off long utterances, so speak one sentence at a time.
   const sentences = text.match(/[^.!?]+[.!?]+["')\]]*|\S[^.!?]*$/g) ?? [text];
-  const [rate, pitch] = BROWSER_VOICE[phase];
+  const [rate, basePitch] = BROWSER_VOICE[phase];
+  const pitch = tone === "reply" ? basePitch + 0.15 : basePitch; // brighter for quick reactions
   const voice = pickVoice();
 
   const done = new Promise<"completed" | "stopped">((resolve, reject) => {

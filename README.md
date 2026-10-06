@@ -11,8 +11,8 @@ Built for the Hiya Voice AI Challenge. Full build spec: [`docs/spec.md`](docs/sp
 ## 1. Product overview
 
 1. **The parent sets up tonight's story** (≈30 seconds the first time, two taps after that): child's name, age, interests, story length, and optionally something private on the child's mind ("nervous about starting school tomorrow"). Each child is saved as a profile on the device, so siblings are one tap away.
-2. **The parent hands over the device.** The child sees a dark screen with one glowing moon.
-3. **The child just talks.** "Tell me a story about a cat that goes to space." Teddy narrates it aloud, occasionally offers a choice ("the blue door or the silver door?"), and accepts interruptions ("wait, make Cosmo purple!"), replying like a person would ("Ooh! A purple cat? I love that!") before carrying on. Vocabulary, sentence length, and plot complexity adapt to the child's age.
+2. **The parent hands over the device.** The child sees a dark screen with Teddy, a friendly bear whose face shows what's happening: ears perk up while listening, mouth moves while talking, eyes grow heavy as the story winds down, and Teddy falls asleep at the end. A sidebar shows which child the story is for, and switches to a sibling in one tap.
+3. **The child just talks.** "Tell me a story about a cat that goes to space." Teddy narrates it aloud, occasionally offers a choice ("the blue door or the silver door?"), and accepts interruptions ("wait, make Cosmo purple!"), replying like a person would ("Ooh! A purple cat? I love that!") before carrying on. To interrupt, the child can tap Teddy or just say **"Teddy!"**: narration stops, Teddy says "Yes?", and listens. Vocabulary, sentence length, and plot complexity adapt to the child's age.
 4. **The story winds down by design.** Choices stop, narration slows, the screen dims, and the story ends peacefully with "Goodnight." The child can say "I'm done" or "I'm sleepy", or a grown-up can tap **Finish story**, and Teddy wraps up with a gentle ending instead of stopping mid-sentence.
 
 ## 2. The problem
@@ -26,7 +26,7 @@ Parents who work late, travel, or are caring for another child miss bedtime stor
 - Talking keeps the child *inside* the story instead of operating an app.
 - Voice also makes the wind-down possible: the voice itself slows and softens, and the child can simply stop answering.
 
-After the setup screen, nothing requires reading. Every state is conveyed by the moon's animation and the narrator's voice.
+After the setup screen, nothing requires reading. Every state is conveyed by Teddy's face and the narrator's voice, and the child can interrupt without touching the screen by calling Teddy's name.
 
 ## 4. Architecture
 
@@ -178,12 +178,13 @@ Most conversational AI optimizes for engagement. Teddy follows the opposite curv
 - Inappropriate requests are **playfully redirected** ("a monster? This one was a fluffy cloud monster who only wanted a hug") rather than refused or scolded.
 - The parent's goal is shaped into the narrative and never revealed ("your mom told me…" is explicitly prohibited).
 - Provider-side safety filters apply on top.
+- The "Teddy!" wake word uses the browser's built-in speech recognition while Teddy narrates. In Chrome this sends microphone audio to Google's speech service during narration, which is worth disclosing to parents (tapping always works as an alternative).
 - Privacy: audio is held in memory only for the transcription request and never stored. There is no database and no accounts. Story state lives in the browser tab.
 
 ## 11. Current limitations
 
 - Saved profiles live in this browser's localStorage: they don't sync between devices, and clearing site data removes them.
-- Interruption is **tap-to-interrupt**, not hands-free barge-in. Voice-detecting speech while the narrator talks would need echo handling.
+- The "Teddy!" wake word depends on the browser's speech recognition (Chrome, Edge, Safari; not Firefox). Loud speakers right next to the mic, or a noisy room, can make it miss the name; tapping always works.
 - Elapsed time is an estimate from word counts, not wall-clock time.
 - The story text isn't streamed from the LLM, so after the quick "Ooh!" there's still a ~2–3 s pause before the story continues. Streaming the LLM's first sentence straight into TTS would cut this further.
 - The volume-based voice detector can be fooled by loud background noise. Tapping the moon always ends listening manually.
@@ -196,7 +197,7 @@ Most conversational AI optimizes for engagement. Teddy follows the opposite curv
 - **Parent voice messages**: the story ends with the real parent's recorded "Goodnight Mia, I love you."
 - **Consented parent-voice narration**, with careful consent and security design.
 - **Streaming + prefetch**: stream LLM text into TTS sentence-by-sentence and prefetch the next segment during playback to remove the pause.
-- **Hands-free barge-in** using echo cancellation and voice-activity detection during narration.
+- **On-device wake word** (e.g. a small keyword-spotting model) so listening for "Teddy" never leaves the device.
 - **Story memory across nights**: "Yesterday Luna discovered the Moon Garden…"
 - **Parent dashboard** with privacy-conscious summaries, not transcripts.
 - **Profiles that sync across devices** (needs accounts), and a bedtime routine: story → breathing exercise → calm sounds → goodnight.

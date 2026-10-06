@@ -4,7 +4,10 @@ import { ProfilePicker } from "../components/ProfilePicker";
 import { deleteProfile, lastUsedProfileId, loadProfiles, saveProfile, type ChildProfile } from "../services/profiles";
 
 interface Props {
-  onStart: (setup: ParentSetup) => Promise<void>;
+  /** profileId is the saved child profile this story is for (null if not saved). */
+  onStart: (setup: ParentSetup, profileId: string | null) => Promise<void>;
+  /** Which child to show first: a profile id, "new" for a blank form, or undefined for the last used. */
+  preselect?: string;
   providerNote?: string;
 }
 
@@ -18,10 +21,13 @@ const DEMO: ParentSetup = {
 };
 
 /** Screen 1: the parent sets things up before handing over the device. */
-export function Setup({ onStart, providerNote }: Props) {
+export function Setup({ onStart, providerNote, preselect }: Props) {
   // Start with the child who had the last story (or the first saved child), already filled in.
   const [profiles, setProfiles] = useState(loadProfiles);
-  const initial = profiles.find((p) => p.id === lastUsedProfileId()) ?? profiles[0] ?? null;
+  const initial =
+    preselect === "new"
+      ? null
+      : (profiles.find((p) => p.id === (preselect ?? lastUsedProfileId())) ?? profiles[0] ?? null);
 
   const [selectedId, setSelectedId] = useState<string | null>(initial?.id ?? null);
   const [name, setName] = useState(initial?.childName ?? "");
@@ -80,8 +86,13 @@ export function Setup({ onStart, providerNote }: Props) {
       durationMinutes: duration,
     };
     try {
-      await onStart({ ...child, parentGoal: goal.trim(), storyRequest: request.trim() });
-      if (remember) saveProfile({ ...child, id: selectedId ?? undefined });
+      // Save first, so the story screen's sidebar can show this child among the others.
+      let profileId: string | null = null;
+      if (remember) {
+        saveProfile({ ...child, id: selectedId ?? undefined });
+        profileId = lastUsedProfileId();
+      }
+      await onStart({ ...child, parentGoal: goal.trim(), storyRequest: request.trim() }, profileId);
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
@@ -91,7 +102,7 @@ export function Setup({ onStart, providerNote }: Props) {
   return (
     <main className="setup">
       <header className="setup__header">
-        <div className="brand">🌙 Teddy</div>
+        <div className="brand">🧸 Teddy</div>
         <h1>Set up tonight's bedtime story</h1>
         <p className="muted">
           Tell Teddy a little about your child. Then hand over the device. Your child just talks, and Teddy tells the story

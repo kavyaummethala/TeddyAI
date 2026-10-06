@@ -6,7 +6,7 @@
 //     |                         story didn't ask: THINKING (auto-continue) |
 //   (errors)                    story finished: FINISHED <-----------------+
 //
-// Tapping the mic while SPEAKING interrupts the narration and starts LISTENING.
+// Tapping Teddy, or saying "Teddy!", while SPEAKING interrupts the narration and starts LISTENING.
 // Speed tricks (a child's attention span is short):
 //  - narration audio streams, so Teddy starts talking ~1s after the text is ready;
 //  - the moment the child's words are understood, Teddy says a quick "Ooh!" while the
@@ -21,7 +21,8 @@ import { useEffect, useRef, useState } from "react";
 import type { AppConfig, StorySegment, StoryState, TurnEvent, TurnResponse } from "../../../shared/types";
 import { takeTurn } from "../services/api";
 import { listen, MicError, type Listening } from "../services/listen";
-import { narrate, preloadQuickReplies, quickReply, unlockAudio, type Narration } from "../services/narrator";
+import { narrate, preloadQuickReplies, quickReply, unlockAudio, wakeReply, type Narration } from "../services/narrator";
+import { containsWakeWord, isWakeWordSupported, listenForWakeWord } from "../services/wakeWord";
 
 export type SessionStatus = "ready" | "listening" | "thinking" | "speaking" | "finished";
 export type SessionError = { kind: "mic" | "stt" | "llm" | "tts"; message: string };
@@ -51,6 +52,8 @@ export function useStorySession(initialState: StoryState, config: AppConfig) {
   const audioUnlocked = useRef(false);
   /** Starts as the server's voice; drops to the browser's built-in voice if that stops working. */
   const ttsMode = useRef(config.tts);
+  /** Stops the "Teddy!" wake-word listener (a no-op when it isn't running). */
+  const stopWakeWord = useRef<() => void>(() => {});
   /** The next "continue" segment, requested early. Only valid if the story state hasn't changed since. */
   const prefetch = useRef<{ basis: StoryState; response: Promise<TurnResponse> } | null>(null);
 
@@ -62,6 +65,7 @@ export function useStorySession(initialState: StoryState, config: AppConfig) {
       runId.current++;
       speaking.current?.stop();
       listening.current?.cancel();
+      stopWakeWord.current();
     },
     [],
   );
@@ -91,6 +95,13 @@ export function useStorySession(initialState: StoryState, config: AppConfig) {
     setError(null);
     const n = narrate(segment.narration, segment.phase, ttsMode.current);
     speaking.current = n;
+    // Let the child interrupt by calling "Teddy!" (skipped if the narration itself says the name).
+    stopWakeWord.current();
+    if (isWakeWordSupported() && !containsWakeWord(segment.narration)) {
+      stopWakeWord.current = listenForWakeWord(() => {
+        if (myRun === runId.current) answerToName();
+      });
+    }
     // Nothing for the child to answer, so start writing the next part while this one plays.
     if (!segment.askForResponse && !segment.finished && prefetch.current?.basis !== stateRef.current) {
       const basis = stateRef.current;
@@ -101,9 +112,11 @@ export function useStorySession(initialState: StoryState, config: AppConfig) {
     try {
       const outcome = await n.done;
       if (myRun !== runId.current || outcome === "stopped") return;
+      stopWakeWord.current();
       afterSegment(segment);
     } catch {
       if (myRun !== runId.current) return;
+      stopWakeWord.current();
       if (ttsMode.current === "server" && "speechSynthesis" in window) {
         switchToDefaultVoice();
         speak(segment); // replay the same part in the built-in voice
@@ -144,8 +157,9 @@ export function useStorySession(initialState: StoryState, config: AppConfig) {
   /**
    * @param afterQuestion the story just asked something. If the child stays quiet we
    *   don't nag — the story gently continues on its own (they may be falling asleep).
+   * @param resumeIfSilent the child called "Teddy!" but then said nothing: just carry on.
    */
-  async function startListening(event: TurnEvent, afterQuestion = false) {
+  async function startListening(event: TurnEvent, afterQuestion = false, resumeIfSilent = false) {
     const myRun = ++runId.current;
     setStatus("listening");
     setError(null);
@@ -162,6 +176,8 @@ export function useStorySession(initialState: StoryState, config: AppConfig) {
         runTurn(text, event, ack);
       } else if (afterQuestion) {
         runTurn("", "no_response");
+      } else if (resumeIfSilent) {
+        runTurn("", "continue");
       } else if (stateRef.current.pacing.segmentCount === 0) {
         runTurn("", "child_spoke"); // nothing said at the start: begin with their interests
       } else {
@@ -175,6 +191,19 @@ export function useStorySession(initialState: StoryState, config: AppConfig) {
     }
   }
 
+  /** The child called "Teddy!" mid-story: stop, answer "Yes?", and listen. */
+  async function answerToName() {
+    const myRun = ++runId.current;
+    stopWakeWord.current();
+    speaking.current?.stop();
+    setStatus("listening"); // ears perk up right away
+    setError(null);
+    const reply = wakeReply(stateRef.current.pacing.phase, ttsMode.current);
+    speaking.current = reply;
+    await reply.done.catch(() => {});
+    if (myRun === runId.current) startListening("interrupted", false, true);
+  }
+
   /** The one big button. What it does depends on the current state. */
   function pressMic() {
     if (!audioUnlocked.current) {
@@ -183,10 +212,18 @@ export function useStorySession(initialState: StoryState, config: AppConfig) {
     }
     switch (status) {
       case "listening":
-        listening.current?.stop(); // done talking — send it now
+        if (listening.current) {
+          listening.current.stop(); // done talking — send it now
+        } else {
+          // Still saying "Yes?" after hearing its name: skip ahead and listen right away.
+          runId.current++;
+          speaking.current?.stop();
+          startListening("interrupted", false, true);
+        }
         break;
       case "speaking":
         runId.current++;
+        stopWakeWord.current();
         speaking.current?.stop();
         startListening("interrupted");
         break;
@@ -201,6 +238,7 @@ export function useStorySession(initialState: StoryState, config: AppConfig) {
   function finishStory() {
     if (status === "finished") return;
     runId.current++; // cancels anything in flight
+    stopWakeWord.current();
     speaking.current?.stop();
     listening.current?.cancel();
     prefetch.current = null;
