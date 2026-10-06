@@ -91,7 +91,7 @@ frontend/src/
 |---|---|---|
 | Frontend | React + TypeScript + Vite, plain CSS | Fast to build, no UI framework needed for two screens |
 | Backend | Node + Express (TypeScript, run with `tsx`) | One language end-to-end; StoryState types shared directly |
-| Story LLM | **Google Gemini 2.5 Flash** (free tier) | Good creative writing, native JSON output, fast with thinking disabled |
+| Story LLM | **Groq `openai/gpt-oss-120b`** (free tier), auto-fallback to **Gemini 3.5 Flash** | ~1 s per segment in testing; Gemini free tier was often overloaded (503s), so it is the backup |
 | Speech-to-text | **Groq Whisper large-v3-turbo** (free tier) | Very fast, accurate; Chrome Web Speech API as a no-key fallback |
 | Text-to-speech | **OpenAI `gpt-4o-mini-tts`** (optional, paid) | Warm voice that accepts delivery instructions ("slower, softer…"); browser voices as a free fallback |
 | Provider SDKs | None (plain `fetch`) | Fewer dependencies; each provider is ~20 lines and easy to swap |
@@ -116,8 +116,8 @@ Open http://localhost:5173, click **"Fill in demo"**, then **Start Bedtime Story
 
 | Variable | Required? | Purpose |
 |---|---|---|
-| `GEMINI_API_KEY` | Recommended (free) | Story engine. Get at https://aistudio.google.com/apikey |
-| `GROQ_API_KEY` | Recommended (free) | Speech-to-text (Whisper). Get at https://console.groq.com/keys |
+| `GEMINI_API_KEY` | Recommended (free) | Backup story engine. Get at https://aistudio.google.com/apikey |
+| `GROQ_API_KEY` | Recommended (free) | Main story engine + speech-to-text (Whisper). Get at https://console.groq.com/keys |
 | `OPENAI_API_KEY` | Optional (paid) | High-quality narration voice (~10–15¢ per 8-min story) |
 | `LLM_PROVIDER` | Optional | `gemini` \| `groq` \| `openai` \| `mock`. Auto-selected from keys if blank |
 | `LLM_MODEL` | Optional | Override the default model |

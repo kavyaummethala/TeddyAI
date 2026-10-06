@@ -82,7 +82,8 @@ export function parseStoryUpdate(raw: string): StoryUpdate {
   if (!obj) {
     // Fallback: plain prose that looks like narration.
     if (cleaned.length > 40 && !cleaned.includes("{")) {
-      return { narration: cleanNarration(cleaned), askForResponse: cleaned.trim().endsWith("?") };
+      const narration = cleanNarration(cleaned);
+      return { narration, askForResponse: endsWithQuestion(narration) };
     }
     throw new Error("Model reply was not valid JSON");
   }
@@ -103,9 +104,15 @@ export function parseStoryUpdate(raw: string): StoryUpdate {
     currentScene: str(obj.currentScene),
     importantEvent: str(obj.importantEvent),
     childChange: str(obj.childChange),
-    // Trust the flag, but also catch a narration that clearly ends on a question.
-    askForResponse: obj.askForResponse === true || narration.endsWith("?"),
+    // Only wait for an answer if the narration really asks one near the end: the flag alone isn't trusted.
+    askForResponse: endsWithQuestion(narration),
   };
+}
+
+/** True if one of the last two sentences is a question. */
+function endsWithQuestion(narration: string): boolean {
+  const sentences = narration.match(/[^.!?]+[.!?]+["'”’)]*/g) ?? [narration];
+  return sentences.slice(-2).some((s) => /\?["'”’)]*$/.test(s.trim()));
 }
 
 /** Removes markup that would sound odd when spoken aloud. */

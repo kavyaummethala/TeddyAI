@@ -27,8 +27,9 @@ const keys = {
 function pickLlm(): LlmProvider {
   const chosen = env("LLM_PROVIDER") as LlmProvider | undefined;
   if (chosen) return chosen;
-  if (keys.gemini) return "gemini";
+  // Groq first: in testing it answered in ~1s with no errors, while Gemini's free tier was often overloaded.
   if (keys.groq) return "groq";
+  if (keys.gemini) return "gemini";
   if (keys.openai) return "openai";
   return "mock";
 }
@@ -49,8 +50,8 @@ function pickTts(): TtsProvider {
 
 const llmProvider = pickLlm();
 const defaultModels: Record<LlmProvider, string> = {
-  gemini: "gemini-2.5-flash",
-  groq: "llama-3.3-70b-versatile",
+  gemini: "gemini-3.5-flash",
+  groq: "openai/gpt-oss-120b",
   openai: "gpt-4o-mini",
   mock: "scripted",
 };
@@ -59,7 +60,14 @@ export const config = {
   port: Number(env("PORT") ?? 8787),
   isProduction: process.env.NODE_ENV === "production",
   keys,
-  llm: { provider: llmProvider, model: env("LLM_MODEL") ?? defaultModels[llmProvider] },
+  llm: {
+    provider: llmProvider,
+    model: env("LLM_MODEL") ?? defaultModels[llmProvider],
+    // If the main provider fails (overloaded, rate-limited, down), try every other provider we have a key for.
+    fallbacks: (["groq", "gemini", "openai"] as const)
+      .filter((p) => p !== llmProvider && llmProvider !== "mock" && keys[p])
+      .map((provider) => ({ provider, model: defaultModels[provider] })),
+  },
   stt: { provider: pickStt() },
   tts: { provider: pickTts(), voice: env("TTS_VOICE") ?? "sage" },
 };

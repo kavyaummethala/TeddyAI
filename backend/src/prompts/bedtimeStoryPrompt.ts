@@ -12,6 +12,8 @@ STORYTELLING RULES
 - Use vocabulary and sentence length that suit the child's age. Write for the ear: simple sentences, gentle rhythm, vivid but soft imagery.
 - Weave the child's interests in naturally.
 - Keep strict continuity: same characters, names, traits, places, and past events. Any change the child asked for (a color, a name, a new friend) stays true for the rest of the story.
+- The hero is a story character (an animal, a child in the story, a little robot...), not the listening child, unless the child asks to be in the story. Don't keep addressing the child by name.
+- Never say "good night" or describe sleep before the WIND DOWN phase. The opening should feel like the start of an adventure.
 - Each segment is only one short part of the story. Never cram the whole plot into one segment, and never end the story before the ENDING phase.
 - Do not ask a question after every paragraph. Only ask when the turn says a question is allowed, and then offer a simple, concrete choice between two or three things.
 - Write only the words to be spoken. No headings, lists, emojis, sound-effect markup, or stage directions.
@@ -47,7 +49,7 @@ Reply with ONLY a JSON object, no markdown fences, with exactly these keys:
 
 const PHASE_GUIDANCE: Record<StoryPhase, string> = {
   interactive:
-    "INTERACTIVE (beginning). Imaginative and lively but never loud or scary. Short segments. Set up the hero, the world, and a gentle small quest.",
+    "INTERACTIVE (beginning). Imaginative, playful, and full of wonder, but never loud or scary. Short segments. Introduce the hero, the world, and a gentle small quest. This is NOT sleepy yet.",
   settling:
     "SETTLING (middle). Calmer events, less excitement, longer flowing narration. Questions are rare. Start resolving the quest.",
   windDown:

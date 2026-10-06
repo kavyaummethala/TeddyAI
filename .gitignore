@@ -1,5 +1,8 @@
 node_modules
 dist
+# Secrets: ignore every env file except the template
 .env
+.env.*
+!.env.example
 .DS_Store
 *.log

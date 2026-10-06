@@ -21,7 +21,8 @@ const SILENT_WAV = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAI
 export function unlockAudio() {
   player.src = SILENT_WAV;
   player.play().catch(() => {});
-  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  // Safari/iOS only allow speech that was first started inside a tap, so speak a silent utterance now.
+  if ("speechSynthesis" in window) speechSynthesis.speak(new SpeechSynthesisUtterance(""));
 }
 
 export function narrate(text: string, phase: StoryPhase, mode: "server" | "browser"): Narration {
@@ -79,26 +80,32 @@ function narrateWithBrowser(text: string, phase: StoryPhase): Narration {
   if (!("speechSynthesis" in window)) {
     return { stop() {}, done: Promise.reject(new TtsError("This browser cannot speak")) };
   }
-  speechSynthesis.cancel();
+  // Chrome bug: speak() right after cancel() is sometimes silently dropped, so only cancel if needed.
+  if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel();
   let stopped = false;
-  // Chrome cuts off long utterances, so speak sentence by sentence.
+  // Chrome cuts off long utterances, so speak one sentence at a time.
   const sentences = text.match(/[^.!?]+[.!?]+["')\]]*|\S[^.!?]*$/g) ?? [text];
   const [rate, pitch] = BROWSER_VOICE[phase];
   const voice = pickVoice();
 
   const done = new Promise<"completed" | "stopped">((resolve, reject) => {
-    sentences.forEach((sentence, i) => {
-      const u = new SpeechSynthesisUtterance(sentence.trim());
+    const speakNext = (i: number) => {
+      if (stopped) return resolve("stopped");
+      if (i >= sentences.length) return resolve("completed");
+      const u = new SpeechSynthesisUtterance(sentences[i].trim());
+      currentUtterance = u; // Chrome bug: unreferenced utterances get garbage-collected and never fire onend
       if (voice) u.voice = voice;
       u.rate = rate;
       u.pitch = pitch;
-      if (i === sentences.length - 1) u.onend = () => resolve(stopped ? "stopped" : "completed");
+      u.onend = () => speakNext(i + 1);
       u.onerror = (e) => {
         if (e.error === "interrupted" || e.error === "canceled") resolve("stopped");
         else reject(new TtsError(e.error));
       };
       speechSynthesis.speak(u);
-    });
+      speechSynthesis.resume(); // Chrome can get stuck "paused" after the tab was in the background
+    };
+    speakNext(0);
   });
 
   return {
@@ -109,3 +116,5 @@ function narrateWithBrowser(text: string, phase: StoryPhase): Narration {
     done,
   };
 }
+
+let currentUtterance: SpeechSynthesisUtterance | null = null;

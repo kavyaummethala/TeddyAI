@@ -31,6 +31,11 @@ if (config.isProduction) {
 
 app.listen(config.port, () => {
   console.log(`Teddy backend on http://localhost:${config.port}`);
-  console.log(`  story engine: ${config.llm.provider} (${config.llm.model})`);
+  const fallbacks = config.llm.fallbacks.map((f) => f.provider).join(", ");
+  console.log(`  story engine: ${config.llm.provider} (${config.llm.model})${fallbacks ? `, falls back to ${fallbacks}` : ""}`);
   console.log(`  speech-to-text: ${config.stt.provider}   text-to-speech: ${config.tts.provider}`);
+  if (config.llm.provider === "mock") {
+    console.warn("\n  ⚠️  No API keys found in .env: using the SCRIPTED offline story (ignores the parent setup).");
+    console.warn("     Add GEMINI_API_KEY (and GROQ_API_KEY) to .env, save, and restart.\n");
+  }
 });

@@ -3,30 +3,45 @@
 
 import { config, requireKey } from "../config";
 
+type Target = { provider: string; model: string };
+
+/** Tries the main provider, then each fallback, so one overloaded provider doesn't stop the story. */
 export async function generateText(system: string, prompt: string): Promise<string> {
-  switch (config.llm.provider) {
+  const targets: Target[] = [config.llm, ...config.llm.fallbacks];
+  let lastError: unknown;
+  for (const target of targets) {
+    try {
+      return await callProvider(target, system, prompt);
+    } catch (err) {
+      lastError = err;
+      console.warn(`[llm] ${target.provider} (${target.model}) failed: ${(err as Error).message.slice(0, 160)}`);
+    }
+  }
+  throw lastError;
+}
+
+function callProvider({ provider, model }: Target, system: string, prompt: string): Promise<string> {
+  switch (provider) {
     case "gemini":
-      return gemini(system, prompt);
+      return gemini(model, system, prompt);
     case "groq":
-      return openAiCompatible("https://api.groq.com/openai/v1", requireKey("groq"), system, prompt);
+      return openAiCompatible("https://api.groq.com/openai/v1", requireKey("groq"), model, system, prompt);
     case "openai":
-      return openAiCompatible("https://api.openai.com/v1", requireKey("openai"), system, prompt);
-    case "mock":
-      throw new Error("mock provider is handled by storyEngine");
+      return openAiCompatible("https://api.openai.com/v1", requireKey("openai"), model, system, prompt);
     default:
-      throw new Error(`Unknown LLM_PROVIDER "${config.llm.provider}"`);
+      throw new Error(`Unknown LLM_PROVIDER "${provider}"`);
   }
 }
 
-async function gemini(system: string, prompt: string): Promise<string> {
-  const model = config.llm.model;
+async function gemini(model: string, system: string, prompt: string): Promise<string> {
   const generationConfig: Record<string, unknown> = {
     responseMimeType: "application/json",
     temperature: 0.9,
     maxOutputTokens: 2048,
   };
-  // 2.5 Flash "thinks" by default, which adds seconds of latency we don't need for storytelling.
+  // Flash models "think" by default, which adds seconds of latency we don't need for storytelling.
   if (model.startsWith("gemini-2.5-flash")) generationConfig.thinkingConfig = { thinkingBudget: 0 };
+  else if (model.startsWith("gemini-3")) generationConfig.thinkingConfig = { thinkingLevel: "low" };
 
   const res = await fetchWithTimeout(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
@@ -48,14 +63,16 @@ async function gemini(system: string, prompt: string): Promise<string> {
 }
 
 /** Works for OpenAI and any OpenAI-compatible API (Groq, etc.). */
-async function openAiCompatible(baseUrl: string, apiKey: string, system: string, prompt: string) {
+async function openAiCompatible(baseUrl: string, apiKey: string, model: string, system: string, prompt: string) {
   const res = await fetchWithTimeout(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: config.llm.model,
+      model,
       temperature: 0.9,
       response_format: { type: "json_object" },
+      // gpt-oss models reason before answering; keep it short for low latency.
+      ...(model.includes("gpt-oss") ? { reasoning_effort: "low" } : {}),
       messages: [
         { role: "system", content: system },
         { role: "user", content: prompt },
