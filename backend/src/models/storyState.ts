@@ -85,6 +85,8 @@ export interface StoryUpdate {
   importantEvent?: string;
   childChange?: string;
   askForResponse: boolean;
+  /** The child said they're done / sleepy, so this segment is the ending. */
+  childWantsToEnd?: boolean;
 }
 
 /** Returns a NEW state with the segment applied (the input is never mutated). */
@@ -123,8 +125,8 @@ export function applyUpdate(
       segmentsSinceQuestion: update.askForResponse ? 0 : prev.pacing.segmentsSinceQuestion + 1,
     },
     interactionCount,
-    // Pacing, not the model, decides when the story ends: the ending segment always finishes it.
-    finished: phaseUsed === "ending",
+    // Pacing decides when the story ends, unless the child asked to stop.
+    finished: phaseUsed === "ending" || !!update.childWantsToEnd,
   };
 
   // Advance the phase for the *next* turn based on the new elapsed estimate.

@@ -43,10 +43,11 @@ export async function nextSegment(
   if (!update) throw lastError ?? new Error("Story engine failed");
 
   // Enforce pacing rules regardless of what the model returned.
-  if (!canAsk) update.askForResponse = false;
-  if (phase === "windDown" || phase === "ending") update.askForResponse = false;
-
   const childSpoke = (event === "child_spoke" || event === "interrupted") && transcript.trim().length > 0;
+  if (!childSpoke) update.childWantsToEnd = false; // only the child can end the story early
+  if (!canAsk) update.askForResponse = false;
+  if (phase === "windDown" || phase === "ending" || update.childWantsToEnd) update.askForResponse = false;
+
   const nextState = applyUpdate(state, phase, update, childSpoke);
 
   return {
@@ -54,7 +55,7 @@ export async function nextSegment(
     segment: {
       narration: update.narration,
       askForResponse: update.askForResponse,
-      phase,
+      phase: update.childWantsToEnd ? "ending" : phase,
       finished: nextState.finished,
     },
   };
@@ -106,6 +107,7 @@ export function parseStoryUpdate(raw: string): StoryUpdate {
     childChange: str(obj.childChange),
     // Only wait for an answer if the narration really asks one near the end: the flag alone isn't trusted.
     askForResponse: endsWithQuestion(narration),
+    childWantsToEnd: obj.childWantsToEnd === true,
   };
 }
 

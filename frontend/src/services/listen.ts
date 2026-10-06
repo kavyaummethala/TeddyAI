@@ -1,10 +1,11 @@
 // Captures one utterance from the child and returns the transcript ("" = nothing heard).
 //
-// Server mode: MediaRecorder + a tiny voice-activity detector (volume threshold) that stops
+// Server mode: MediaRecorder + a voice-activity detector (voiceActivity.ts) that stops
 //   recording automatically once the child stops talking, then sends the audio to /api/speech.
 // Browser mode: Chrome's built-in Web Speech API (free, no key needed).
 
 import { transcribeAudio } from "./api";
+import { VoiceActivityDetector } from "./voiceActivity";
 
 export class MicError extends Error {}
 
@@ -30,9 +31,6 @@ export function listen(opts: ListenOptions): Listening {
 
 // ---------- Server transcription (MediaRecorder + simple VAD) ----------
 
-const SILENCE_AFTER_SPEECH_MS = 1400;
-const MAX_UTTERANCE_MS = 15_000;
-
 let micStream: MediaStream | null = null;
 let audioContext: AudioContext | null = null;
 
@@ -54,7 +52,7 @@ function pickMimeType(): string | undefined {
   return types.find((t) => MediaRecorder.isTypeSupported(t));
 }
 
-function listenWithRecorder({ onLevel, noSpeechTimeoutMs = 7000 }: ListenOptions): Listening {
+function listenWithRecorder({ onLevel, noSpeechTimeoutMs = 8000 }: ListenOptions): Listening {
   let finish: ((transcribe: boolean) => void) | null = null;
   let pending: boolean | null = null; // stop()/cancel() called before the mic was ready
 
@@ -74,11 +72,8 @@ function listenWithRecorder({ onLevel, noSpeechTimeoutMs = 7000 }: ListenOptions
     const chunks: Blob[] = [];
     recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
 
-    const startedAt = performance.now();
-    let noiseFloor = 0.01;
-    let speechStarted = false;
-    let loudFrames = 0;
-    let lastLoudAt = 0;
+    const vad = new VoiceActivityDetector({ noSpeechTimeoutMs });
+    let lastTick = performance.now();
     let shouldTranscribe = true;
 
     const stopped = new Promise<void>((resolve) => (recorder.onstop = () => resolve()));
@@ -93,29 +88,16 @@ function listenWithRecorder({ onLevel, noSpeechTimeoutMs = 7000 }: ListenOptions
       if (recorder.state !== "inactive") recorder.stop();
     };
 
-    // Volume-based voice activity detection, sampled every 50ms.
+    // Sample the mic volume every 50ms and let the voice-activity detector decide when to stop.
     const timer = setInterval(() => {
       analyser.getFloatTimeDomainData(samples);
       const rms = Math.sqrt(samples.reduce((sum, s) => sum + s * s, 0) / samples.length);
-      const now = performance.now() - startedAt;
+      const now = performance.now();
+      const state = vad.update(rms, now - lastTick);
+      lastTick = now;
       onLevel?.(Math.min(1, rms * 12));
-
-      if (now < 300) {
-        noiseFloor = Math.max(noiseFloor, rms); // calibrate to room noise for the first 300ms
-        return;
-      }
-      const threshold = Math.max(0.02, noiseFloor * 2.5);
-      if (rms > threshold) {
-        loudFrames++;
-        lastLoudAt = now;
-        if (loudFrames >= 3) speechStarted = true;
-      } else {
-        loudFrames = 0;
-      }
-
-      if (speechStarted && now - lastLoudAt > SILENCE_AFTER_SPEECH_MS) done(true);
-      else if (!speechStarted && now > noSpeechTimeoutMs) done(false);
-      else if (now > MAX_UTTERANCE_MS) done(true);
+      if (state === "done") done(true);
+      else if (state === "no_speech") done(false);
     }, 50);
 
     recorder.start();
