@@ -1,0 +1,538 @@
+:root {
+  --bg: #0b1026;
+  --bg-2: #141a3a;
+  --card: #161d40;
+  --line: #2a3263;
+  --text: #e9e6ff;
+  --muted: #9a9cc4;
+  --moon: #f6e7b0;
+  --moon-glow: rgba(246, 231, 176, 0.45);
+  --accent: #b9a7ff;
+  --danger: #ffb4a8;
+  --radius: 16px;
+  /* Wind Down Mode: these get softer as the story progresses (see [data-phase] below). */
+  --glow: 1;
+  --breath: 4s;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Nunito", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+.brand,
+.story__title {
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 600;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.muted {
+  color: var(--muted);
+}
+.tiny {
+  font-size: 0.75rem;
+}
+.center {
+  text-align: center;
+}
+
+.link {
+  background: none;
+  border: none;
+  color: var(--muted);
+  padding: 8px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.link:hover {
+  color: var(--text);
+}
+
+.primary {
+  background: var(--moon);
+  color: #1b1840;
+  border: none;
+  border-radius: 999px;
+  padding: 14px 24px;
+  font-weight: 700;
+  font-size: 1.05rem;
+  transition: transform 0.15s, opacity 0.15s;
+}
+.primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.primary.small {
+  padding: 10px 18px;
+  font-size: 0.95rem;
+}
+
+/* ---------- Setup screen ---------- */
+
+.setup {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 40px 16px 60px;
+  background: radial-gradient(ellipse at top, var(--bg-2), transparent 60%);
+}
+.setup__header {
+  margin-bottom: 24px;
+}
+.brand {
+  font-size: 1.1rem;
+  color: var(--moon);
+  margin-bottom: 12px;
+}
+.setup h1 {
+  font-size: clamp(1.7rem, 5vw, 2.2rem);
+  line-height: 1.15;
+  margin: 0 0 10px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.row {
+  display: flex;
+  gap: 14px;
+}
+.row .field {
+  flex: 1;
+}
+.row .field--small {
+  flex: 0 0 90px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: none;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.field > span {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.field em {
+  font-style: normal;
+  font-weight: 400;
+  color: var(--muted);
+}
+.field small {
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+input,
+textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 11px 12px;
+  width: 100%;
+  resize: vertical;
+}
+input:focus,
+textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+input::placeholder,
+textarea::placeholder {
+  color: #5f6290;
+}
+
+.segmented {
+  display: flex;
+  gap: 8px;
+}
+.segmented button {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px;
+}
+.segmented button.active {
+  border-color: var(--moon);
+  background: rgba(246, 231, 176, 0.12);
+  color: var(--moon);
+  font-weight: 700;
+}
+
+.error-text {
+  color: var(--danger);
+  margin: 0;
+}
+
+/* ---------- Story screen ---------- */
+
+.story {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: radial-gradient(ellipse at 50% 35%, #1a2150 0%, var(--bg) 65%);
+  transition: filter 3s ease;
+}
+/* Wind Down Mode, visually: the whole screen dims and every animation slows down. */
+.story[data-phase="settling"] {
+  --glow: 0.8;
+  --breath: 5s;
+}
+.story[data-phase="windDown"] {
+  --glow: 0.55;
+  --breath: 6.5s;
+  filter: brightness(0.8);
+}
+.story[data-phase="ending"],
+.story[data-status="finished"] {
+  --glow: 0.35;
+  --breath: 8s;
+  filter: brightness(0.65);
+}
+
+/* Twinkling star field, pure CSS. */
+.sky {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(1.5px 1.5px at 12% 18%, #fff8 50%, transparent 51%),
+    radial-gradient(1px 1px at 28% 72%, #fff6 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 44% 12%, #fff7 50%, transparent 51%),
+    radial-gradient(1px 1px at 63% 30%, #fff5 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 78% 64%, #fff7 50%, transparent 51%),
+    radial-gradient(1px 1px at 88% 20%, #fff6 50%, transparent 51%),
+    radial-gradient(1px 1px at 8% 86%, #fff5 50%, transparent 51%),
+    radial-gradient(1.5px 1.5px at 92% 88%, #fff6 50%, transparent 51%);
+  animation: twinkle 7s ease-in-out infinite alternate;
+}
+@keyframes twinkle {
+  from {
+    opacity: 0.5;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.story__top,
+.story__center,
+.story__bottom {
+  position: relative;
+  z-index: 1;
+}
+.story__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  gap: 12px;
+}
+.story__title {
+  color: var(--muted);
+  font-size: 0.95rem;
+  text-align: right;
+}
+
+.story__center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 24px 16px;
+}
+
+.status {
+  font-family: "Fraunces", Georgia, serif;
+  font-size: clamp(1.3rem, 4.5vw, 1.7rem);
+  text-align: center;
+  margin: 0;
+  max-width: 22ch;
+  min-height: 2.6em;
+}
+
+/* The moon button */
+.moon {
+  --size: min(56vw, 230px);
+  --level: 0;
+  position: relative;
+  width: var(--size);
+  height: var(--size);
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  background: none;
+  color: #3a3270;
+  -webkit-tap-highlight-color: transparent;
+}
+.moon:disabled {
+  cursor: default;
+}
+.moon__face {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 35% 30%, #fffbe8, var(--moon) 55%, #d9c78a);
+  box-shadow: 0 0 calc(60px * var(--glow)) calc(10px * var(--glow)) var(--moon-glow);
+  transition: transform 0.2s, box-shadow 0.6s;
+}
+.moon:active .moon__face {
+  transform: scale(0.97);
+}
+.moon__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--moon-glow);
+  opacity: 0;
+}
+
+/* Ready: gentle breathing so it invites a tap */
+.moon--ready .moon__face {
+  animation: breathe var(--breath) ease-in-out infinite;
+}
+/* Listening: rings react to the child's voice */
+.moon--listening .moon__face {
+  transform: scale(calc(1 + var(--level) * 0.08));
+  box-shadow: 0 0 calc(40px + 60px * var(--level)) calc(8px + 16px * var(--level)) rgba(185, 167, 255, 0.55);
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+.moon--listening .moon__ring {
+  border-color: var(--accent);
+  animation: ripple 1.8s ease-out infinite;
+}
+.moon--listening .moon__ring--2 {
+  animation-delay: 0.9s;
+}
+/* Thinking: soft shimmer */
+.moon--thinking .moon__face {
+  animation: breathe 1.6s ease-in-out infinite;
+  filter: saturate(0.8);
+}
+/* Speaking: slow glow, slower as Wind Down progresses */
+.moon--speaking .moon__face {
+  animation: glow var(--breath) ease-in-out infinite;
+}
+.moon--speaking .moon__ring {
+  animation: ripple calc(var(--breath) * 1.2) ease-out infinite;
+}
+.moon--finished .moon__face {
+  filter: brightness(0.7);
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+}
+@keyframes glow {
+  0%,
+  100% {
+    box-shadow: 0 0 calc(40px * var(--glow)) calc(6px * var(--glow)) var(--moon-glow);
+  }
+  50% {
+    box-shadow: 0 0 calc(90px * var(--glow)) calc(22px * var(--glow)) var(--moon-glow);
+  }
+}
+@keyframes ripple {
+  from {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  to {
+    transform: scale(1.45);
+    opacity: 0;
+  }
+}
+
+.dots {
+  display: flex;
+  gap: 8px;
+}
+.dots i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: bounce 1.2s ease-in-out infinite;
+}
+.dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes bounce {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-5px);
+  }
+}
+
+.error-box {
+  background: rgba(255, 180, 168, 0.08);
+  border: 1px solid rgba(255, 180, 168, 0.35);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  max-width: 420px;
+  text-align: center;
+}
+.error-box p {
+  margin: 0 0 10px;
+}
+.error-box__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.story__bottom {
+  padding: 0 16px 20px;
+  max-width: 640px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.story-text {
+  text-align: center;
+}
+.story-text .link {
+  font-size: 0.8rem;
+}
+.story-text__heard {
+  color: var(--accent);
+  font-style: italic;
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+}
+.story-text__narration {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+  font-size: 0.98rem;
+  max-height: 9.6em;
+  overflow-y: auto;
+}
+
+.memory {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(22, 29, 64, 0.6);
+  font-size: 0.85rem;
+}
+.memory summary {
+  padding: 10px 14px;
+  cursor: pointer;
+  color: var(--muted);
+}
+.memory__body {
+  padding: 0 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.memory__meta {
+  margin: 0;
+  color: var(--muted);
+}
+.memory__field h4 {
+  margin: 0 0 2px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.memory__field ol {
+  margin: 0;
+  padding-left: 18px;
+}
+.phases {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.phase {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.phase--active {
+  border-color: var(--moon);
+  color: var(--moon);
+}
+.progress {
+  height: 4px;
+  background: var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.progress span {
+  display: block;
+  height: 100%;
+  background: var(--moon);
+  transition: width 1s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
