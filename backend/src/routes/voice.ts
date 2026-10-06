@@ -1,19 +1,35 @@
 import { Router } from "express";
+import { Readable } from "node:stream";
 import type { StoryPhase } from "../../../shared/types";
-import { synthesize } from "../services/textToSpeech";
+import { disableServerTts, isPermanentTtsFailure, synthesizeStream } from "../services/textToSpeech";
 
 export const voiceRouter = Router();
 
-/** POST /api/voice/speak { text, phase } -> audio/mpeg */
-voiceRouter.post("/speak", async (req, res) => {
-  const text = String(req.body?.text ?? "").trim().slice(0, 4000);
-  const phase = (req.body?.phase ?? "interactive") as StoryPhase;
+const PHASES: StoryPhase[] = ["interactive", "settling", "windDown", "ending"];
+
+/**
+ * GET /api/voice/stream?text=...&phase=... -> streamed audio/mpeg
+ * A GET URL (not POST) so the browser's <audio> element can play it progressively while it
+ * downloads. Identical requests (like the short "Ooh!" acknowledgments) are cached by the browser.
+ */
+voiceRouter.get("/stream", async (req, res) => {
+  const text = String(req.query.text ?? "").trim().slice(0, 4000);
+  const phase = PHASES.includes(req.query.phase as StoryPhase) ? (req.query.phase as StoryPhase) : "interactive";
   if (!text) return res.status(400).json({ error: "No text to speak." });
+
+  // If the child interrupts, the browser drops the request; stop generating audio we won't play.
+  const abort = new AbortController();
+  res.on("close", () => abort.abort());
+
   try {
-    const audio = await synthesize(text, phase);
-    res.type("audio/mpeg").send(audio);
+    const audio = await synthesizeStream(text, phase, abort.signal);
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Cache-Control", "private, max-age=3600");
+    Readable.fromWeb(audio as import("node:stream/web").ReadableStream).on("error", () => res.end()).pipe(res);
   } catch (err) {
-    console.error("[voice/speak]", err);
+    if (abort.signal.aborted) return;
+    console.error("[voice/stream]", (err as Error).message);
+    if (isPermanentTtsFailure(err)) disableServerTts("key invalid or out of credits");
     res.status(502).json({ error: "The narrator's voice isn't working right now." });
   }
 });

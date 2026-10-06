@@ -1,4 +1,4 @@
-// Text-to-speech. Returns MP3 bytes for a narration segment.
+// Text-to-speech. Streams MP3 audio for a narration segment.
 // The voice gets calmer and slower as the story moves through Wind Down Mode.
 
 import type { StoryPhase } from "../../../shared/types";
@@ -12,19 +12,46 @@ const DELIVERY: Record<StoryPhase, string> = {
   ending: "The softest, slowest, most soothing voice, as if the child is nearly asleep. Gentle pauses.",
 };
 
-export async function synthesize(text: string, phase: StoryPhase): Promise<Buffer> {
+/**
+ * Starts generating narration audio and returns it as a stream of MP3 bytes, so playback can
+ * begin after ~1s instead of waiting for the whole segment (which took 5-30s).
+ */
+export async function synthesizeStream(text: string, phase: StoryPhase, signal?: AbortSignal) {
   if (config.tts.provider !== "openai") throw new Error("TTS_PROVIDER=browser: speech happens in the browser");
 
-  const res = await fetchWithTimeout("https://api.openai.com/v1/audio/speech", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${requireKey("openai")}` },
-    body: JSON.stringify({
-      model: "gpt-4o-mini-tts",
-      voice: config.tts.voice,
-      input: text,
-      instructions: DELIVERY[phase],
-      response_format: "mp3",
-    }),
-  });
-  return Buffer.from(await res.arrayBuffer());
+  const res = await fetchWithTimeout(
+    "https://api.openai.com/v1/audio/speech",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${requireKey("openai")}` },
+      body: JSON.stringify({
+        model: "gpt-4o-mini-tts",
+        voice: config.tts.voice,
+        input: text,
+        instructions: DELIVERY[phase],
+        response_format: "mp3",
+      }),
+    },
+    8_000, // fail fast so the app can switch to the default voice without a long silence
+    signal,
+  );
+  if (!res.body) throw new Error("TTS returned no audio");
+  return res.body;
+}
+
+/**
+ * True if the TTS provider will keep failing until someone fixes the account: invalid or
+ * revoked key, or credits used up. (Network blips and rate limits are NOT permanent.)
+ */
+export function isPermanentTtsFailure(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /responded (401|403)|insufficient_quota|billing|invalid_api_key/i.test(msg);
+}
+
+/** Switch the whole app to the browser's built-in voice (new stories will start with it). */
+export function disableServerTts(reason: string) {
+  if (config.tts.provider === "browser") return;
+  config.tts.provider = "browser";
+  console.warn(`\n  ⚠️  OpenAI voice disabled (${reason}). Switching to the default browser voice.`);
+  console.warn("     Check your OpenAI key / credits, then restart to get the OpenAI voice back.\n");
 }

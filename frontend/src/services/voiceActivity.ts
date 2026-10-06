@@ -27,7 +27,7 @@ export class VoiceActivityDetector {
   private readonly maxUtteranceMs: number;
 
   constructor(opts: VadOptions = {}) {
-    this.silenceAfterSpeechMs = opts.silenceAfterSpeechMs ?? 1200;
+    this.silenceAfterSpeechMs = opts.silenceAfterSpeechMs ?? 1000;
     this.noSpeechTimeoutMs = opts.noSpeechTimeoutMs ?? 8000;
     this.maxUtteranceMs = opts.maxUtteranceMs ?? 12000;
   }

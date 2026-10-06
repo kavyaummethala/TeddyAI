@@ -10,10 +10,10 @@ Built for the Hiya Voice AI Challenge. Full build spec: [`docs/spec.md`](docs/sp
 
 ## 1. Product overview
 
-1. **The parent sets up tonight's story** (≈30 seconds): child's name, age, interests, story length, and optionally something private on the child's mind ("nervous about starting school tomorrow").
+1. **The parent sets up tonight's story** (≈30 seconds the first time, two taps after that): child's name, age, interests, story length, and optionally something private on the child's mind ("nervous about starting school tomorrow"). Each child is saved as a profile on the device, so siblings are one tap away.
 2. **The parent hands over the device.** The child sees a dark screen with one glowing moon.
-3. **The child just talks.** "Tell me a story about a cat that goes to space." Teddy narrates it aloud, occasionally offers a choice ("the blue door or the silver door?"), and accepts interruptions ("wait, make Cosmo purple!").
-4. **The story winds down by design.** Choices stop, narration slows, the screen dims, and the story ends peacefully with "Goodnight."
+3. **The child just talks.** "Tell me a story about a cat that goes to space." Teddy narrates it aloud, occasionally offers a choice ("the blue door or the silver door?"), and accepts interruptions ("wait, make Cosmo purple!"), replying like a person would ("Ooh! A purple cat? I love that!") before carrying on. Vocabulary, sentence length, and plot complexity adapt to the child's age.
+4. **The story winds down by design.** Choices stop, narration slows, the screen dims, and the story ends peacefully with "Goodnight." The child can say "I'm done" or "I'm sleepy", or a grown-up can tap **Finish story**, and Teddy wraps up with a gentle ending instead of stopping mid-sentence.
 
 ## 2. The problem
 
@@ -60,6 +60,8 @@ READY ─tap─▶ LISTENING ─speech─▶ THINKING ─▶ SPEAKING ─┬─ 
 ```
 
 - Listening stops automatically when the child stops talking (a small volume-based voice-activity detector in `services/listen.ts`). If the story asked a question and the child stays quiet, **the story continues on its own** instead of nagging, because a quiet child may be falling asleep.
+- **Responsiveness** (a young child's attention span is short): narration audio *streams*, so Teddy starts talking ~1 s after the text is ready instead of waiting 5–30 s for a whole segment; the moment the child's words are understood Teddy says a quick "Ooh!" (cached clips) while the story is written; and while a segment without a question plays, the next one is fetched in the background. Measured: the "Ooh!" comes ~1 s after the child stops talking, and the story resumes ~3.5 s after.
+- **Voice fallback:** if the OpenAI voice fails (expired key, no credits, offline), the screen shows "Switching to the default voice", the same part is replayed with the browser's built-in voice, and the server stops using OpenAI for new stories when the key or credits are the problem.
 - The **backend is stateless**. The browser holds `StoryState` and sends it with each turn, and the backend returns an updated copy. A failed request never corrupts the story: the old state is reused on retry, and backend restarts don't lose sessions.
 
 ### Project structure
@@ -180,9 +182,10 @@ Most conversational AI optimizes for engagement. Teddy follows the opposite curv
 
 ## 11. Current limitations
 
+- Saved profiles live in this browser's localStorage: they don't sync between devices, and clearing site data removes them.
 - Interruption is **tap-to-interrupt**, not hands-free barge-in. Voice-detecting speech while the narrator talks would need echo handling.
 - Elapsed time is an estimate from word counts, not wall-clock time.
-- Turns are request/response (no streaming), so there's a ~2–5 s "Thinking…" pause between segments.
+- The story text isn't streamed from the LLM, so after the quick "Ooh!" there's still a ~2–3 s pause before the story continues. Streaming the LLM's first sentence straight into TTS would cut this further.
 - The volume-based voice detector can be fooled by loud background noise. Tapping the moon always ends listening manually.
 - Browser speech recognition fallback works only in Chrome. Browser TTS voices vary by OS.
 - Gemini's free tier may use requests to improve Google's products, which isn't appropriate for a production children's app (use a paid tier or another provider).
@@ -196,7 +199,7 @@ Most conversational AI optimizes for engagement. Teddy follows the opposite curv
 - **Hands-free barge-in** using echo cancellation and voice-activity detection during narration.
 - **Story memory across nights**: "Yesterday Luna discovered the Moon Garden…"
 - **Parent dashboard** with privacy-conscious summaries, not transcripts.
-- **Multiple child profiles**, and a bedtime routine: story → breathing exercise → calm sounds → goodnight.
+- **Profiles that sync across devices** (needs accounts), and a bedtime routine: story → breathing exercise → calm sounds → goodnight.
 - **Gentle vocal adaptation** (pace/energy, not emotion inference): calmer narration for a restless child.
 
 Privacy principles for production: delete raw audio after transcription, store summaries rather than conversations, give parents explicit control and clear retention, and never advertise based on children's conversations.

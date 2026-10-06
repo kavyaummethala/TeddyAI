@@ -1,8 +1,7 @@
-// Plays narration aloud. Server mode fetches MP3 from /api/voice; browser mode uses speechSynthesis.
+// Plays narration aloud. Server mode streams MP3 from /api/voice; browser mode uses speechSynthesis.
 // Either way, narration slows down as the story moves into Wind Down Mode.
 
 import type { StoryPhase } from "../../../shared/types";
-import { synthesizeSpeech } from "./api";
 
 export class TtsError extends Error {}
 
@@ -29,38 +28,53 @@ export function narrate(text: string, phase: StoryPhase, mode: "server" | "brows
   return mode === "browser" ? narrateWithBrowser(text, phase) : narrateWithServer(text, phase);
 }
 
+/** Streams audio from the backend; the <audio> element starts playing as soon as bytes arrive. */
 function narrateWithServer(text: string, phase: StoryPhase): Narration {
-  let stopped = false;
   let resolveStopped: (v: "stopped") => void = () => {};
 
   const done = new Promise<"completed" | "stopped">((resolve, reject) => {
     resolveStopped = resolve;
-    synthesizeSpeech(text, phase)
-      .then((blob) => {
-        if (stopped) return;
-        const url = URL.createObjectURL(blob);
-        player.src = url;
-        player.onended = () => {
-          URL.revokeObjectURL(url);
-          resolve("completed");
-        };
-        player.onerror = () => reject(new TtsError("Audio playback failed"));
-        return player.play();
-      })
-      .catch((err) => {
-        if (!stopped) reject(new TtsError(err.message));
-      });
+    player.onended = () => resolve("completed");
+    player.onerror = () => reject(new TtsError("Audio playback failed"));
+    player.src = `/api/voice/stream?${new URLSearchParams({ text, phase })}`;
+    player.play().catch((err) => reject(new TtsError(err.message)));
   });
 
   return {
     stop() {
-      stopped = true;
-      player.pause();
       player.onended = null;
+      player.onerror = null;
+      player.pause();
+      player.removeAttribute("src"); // also cancels the download, so the server stops generating
+      player.load();
       resolveStopped("stopped");
     },
     done,
   };
+}
+
+// Short, instant acknowledgments played the moment the child finishes talking, so they know
+// Teddy heard them while the next part of the story is being written. After the first use,
+// the browser caches each clip, so they play immediately.
+const QUICK_REPLIES = {
+  lively: ["Ooh!", "Oh, okay!", "Hmm!", "Oh!"],
+  calm: ["Mm, okay.", "Mm-hmm."],
+};
+
+export function quickReply(phase: StoryPhase, mode: "server" | "browser"): { text: string; narration: Narration } {
+  const options = phase === "interactive" || phase === "settling" ? QUICK_REPLIES.lively : QUICK_REPLIES.calm;
+  const text = options[Math.floor(Math.random() * options.length)];
+  return { text, narration: narrate(text, phase, mode) };
+}
+
+/** Warm the browser cache so the first quick reply is instant too. */
+export function preloadQuickReplies(mode: "server" | "browser") {
+  if (mode !== "server") return;
+  const all = [
+    ...QUICK_REPLIES.lively.map((text) => ({ text, phase: "interactive" })),
+    ...QUICK_REPLIES.calm.map((text) => ({ text, phase: "windDown" })),
+  ];
+  for (const { text, phase } of all) fetch(`/api/voice/stream?${new URLSearchParams({ text, phase })}`).catch(() => {});
 }
 
 const BROWSER_VOICE = { interactive: [0.95, 1.05], settling: [0.9, 1.0], windDown: [0.82, 0.95], ending: [0.78, 0.92] };

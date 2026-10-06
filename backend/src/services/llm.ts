@@ -85,12 +85,22 @@ async function openAiCompatible(baseUrl: string, apiKey: string, model: string, 
   return text;
 }
 
-/** fetch with a timeout and a readable error for non-2xx responses. */
-export async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 30_000) {
-  const res = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`${new URL(url).host} responded ${res.status}: ${body.slice(0, 300)}`);
+/**
+ * fetch with a timeout on the *response headers* (the body may then stream for as long as it
+ * needs) and a readable error for non-2xx responses. `signal` lets callers abort early.
+ */
+export async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 30_000, signal?: AbortSignal) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error(`${new URL(url).host} timed out`)), timeoutMs);
+  signal?.addEventListener("abort", () => controller.abort(signal.reason));
+  try {
+    const res = await fetch(url, { ...init, signal: controller.signal });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`${new URL(url).host} responded ${res.status}: ${body.slice(0, 300)}`);
+    }
+    return res;
+  } finally {
+    clearTimeout(timer);
   }
-  return res;
 }

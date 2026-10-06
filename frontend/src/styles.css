@@ -192,6 +192,97 @@ textarea::placeholder {
   font-weight: 700;
 }
 
+.checkbox {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.checkbox input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--moon);
+  flex: none;
+}
+
+/* Saved child profiles */
+.profiles {
+  margin-bottom: 20px;
+}
+.profiles h2 {
+  font-size: 1rem;
+  margin: 0 0 10px;
+}
+.profiles__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.profile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  color: var(--text);
+}
+.profile--active {
+  border-color: var(--moon);
+  background: rgba(246, 231, 176, 0.1);
+}
+.profile__pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: none;
+  color: inherit;
+  padding: 10px 8px 10px 12px;
+  text-align: left;
+}
+.profile__avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--moon);
+  color: #1b1840;
+  font-weight: 700;
+}
+.profile__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.profile__text small {
+  color: var(--muted);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.profile__delete {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 1.2rem;
+  padding: 6px 10px 6px 4px;
+  line-height: 1;
+}
+.profile__delete:hover {
+  color: var(--danger);
+}
+.profile--new {
+  padding: 0 16px;
+  min-height: 56px;
+  color: var(--muted);
+  border-style: dashed;
+}
+
 .error-text {
   color: var(--danger);
   margin: 0;
@@ -277,6 +368,18 @@ textarea::placeholder {
   justify-content: center;
   gap: 20px;
   padding: 24px 16px;
+}
+
+.pill {
+  background: rgba(22, 29, 64, 0.7);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 0.9rem;
+}
+.pill:hover {
+  border-color: var(--moon);
 }
 
 .status {
@@ -414,6 +517,28 @@ textarea::placeholder {
   50% {
     opacity: 1;
     transform: translateY(-5px);
+  }
+}
+
+.notice {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  background: var(--card);
+  border: 1px solid var(--accent);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  animation: notice-in 0.4s ease-out;
+}
+@keyframes notice-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px);
   }
 }
 

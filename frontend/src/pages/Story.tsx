@@ -19,11 +19,20 @@ export function Story({ initialState, config, onExit }: Props) {
   return (
     <main className="story" data-phase={state.pacing.phase} data-status={status}>
       <div className="sky" aria-hidden />
+      {session.notice && (
+        <div className="notice" role="status">
+          {session.notice}
+        </div>
+      )}
       <header className="story__top">
         <button className="link" onClick={onExit}>
           ← Grown-ups
         </button>
-        {state.story.title && <span className="story__title">{state.story.title}</span>}
+        {status !== "finished" && (
+          <button className="pill" onClick={session.finishStory}>
+            ☾ Finish story
+          </button>
+        )}
       </header>
 
       <section className="story__center">

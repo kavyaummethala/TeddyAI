@@ -89,6 +89,8 @@ function describeEvent(event: TurnEvent, transcript: string, state: StoryState):
       return `The child interrupted the story to say: "${said}". Start with a short, warm reply to them in your own words, then make it happen in the story and pick up where it left off.`;
     case "no_response":
       return "You asked the child a question but they stayed quiet (they may be getting sleepy). Gently make the choice yourself and continue calmly. Do not ask again, and don't reply to the child as if they had spoken.";
+    case "wrap_up":
+      return "It's time to finish the story NOW. In this one segment, gently wrap up whatever is happening, bring the hero home safe and cozy, and end with \"The end. Goodnight.\" Don't rush or mention that it's ending early, no questions, and don't reply to the child as if they had spoken.";
     case "continue":
     default:
       return "The child did not say anything this time. Do NOT start with a reply to the child; just continue the story from where it left off.";
@@ -101,6 +103,7 @@ export function buildTurnPrompt(
   event: TurnEvent,
   phase: StoryPhase,
   canAsk: boolean,
+  acknowledged?: string,
 ): string {
   const { child, story, pacing } = state;
   const style = ageStyle(child.age);
@@ -141,7 +144,11 @@ Length: ${minWords}-${maxWords} words of narration.
 Question allowed this turn: ${canAsk ? "yes — you MAY end with one simple choice for the child, but only if it fits naturally" : "NO — do not ask the child anything; askForResponse must be false"}.
 
 THIS TURN
-${describeEvent(event, transcript, state)}
+${describeEvent(event, transcript, state)}${
+    acknowledged
+      ? `\nYou ALREADY said "${acknowledged}" out loud the moment they finished talking. Don't start with that again; go straight into the rest of your reply (for example, repeat back what they asked for).`
+      : ""
+  }
 
 Reply with the JSON object only.`;
 }

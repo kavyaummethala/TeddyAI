@@ -1,5 +1,7 @@
 import { useState } from "react";
 import type { ParentSetup } from "../../../shared/types";
+import { ProfilePicker } from "../components/ProfilePicker";
+import { deleteProfile, lastUsedProfileId, loadProfiles, saveProfile, type ChildProfile } from "../services/profiles";
 
 interface Props {
   onStart: (setup: ParentSetup) => Promise<void>;
@@ -17,16 +19,48 @@ const DEMO: ParentSetup = {
 
 /** Screen 1: the parent sets things up before handing over the device. */
 export function Setup({ onStart, providerNote }: Props) {
-  const [name, setName] = useState("");
-  const [age, setAge] = useState("6");
-  const [interests, setInterests] = useState("");
-  const [duration, setDuration] = useState(8);
+  // Start with the child who had the last story (or the first saved child), already filled in.
+  const [profiles, setProfiles] = useState(loadProfiles);
+  const initial = profiles.find((p) => p.id === lastUsedProfileId()) ?? profiles[0] ?? null;
+
+  const [selectedId, setSelectedId] = useState<string | null>(initial?.id ?? null);
+  const [name, setName] = useState(initial?.childName ?? "");
+  const [age, setAge] = useState(String(initial?.childAge ?? 6));
+  const [interests, setInterests] = useState(initial?.interests.join(", ") ?? "");
+  const [duration, setDuration] = useState(initial?.durationMinutes ?? 8);
   const [goal, setGoal] = useState("");
   const [request, setRequest] = useState("");
+  const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
+  function selectProfile(p: ChildProfile) {
+    setSelectedId(p.id);
+    setName(p.childName);
+    setAge(String(p.childAge));
+    setInterests(p.interests.join(", "));
+    setDuration(p.durationMinutes);
+    setGoal(""); // tonight's worries and ideas are per-night, never carried over
+    setRequest("");
+  }
+
+  function newChild() {
+    setSelectedId(null);
+    setName("");
+    setAge("6");
+    setInterests("");
+    setDuration(8);
+    setGoal("");
+    setRequest("");
+  }
+
+  function removeProfile(p: ChildProfile) {
+    setProfiles(deleteProfile(p.id));
+    if (p.id === selectedId) newChild();
+  }
+
   function fillDemo() {
+    setSelectedId(null);
     setName(DEMO.childName);
     setAge(String(DEMO.childAge));
     setInterests(DEMO.interests.join(", "));
@@ -39,15 +73,15 @@ export function Setup({ onStart, providerNote }: Props) {
     e.preventDefault();
     setBusy(true);
     setError("");
+    const child = {
+      childName: name.trim(),
+      childAge: Number(age),
+      interests: interests.split(",").map((s) => s.trim()).filter(Boolean),
+      durationMinutes: duration,
+    };
     try {
-      await onStart({
-        childName: name.trim(),
-        childAge: Number(age),
-        interests: interests.split(",").map((s) => s.trim()).filter(Boolean),
-        durationMinutes: duration,
-        parentGoal: goal.trim(),
-        storyRequest: request.trim(),
-      });
+      await onStart({ ...child, parentGoal: goal.trim(), storyRequest: request.trim() });
+      if (remember) saveProfile({ ...child, id: selectedId ?? undefined });
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
@@ -64,6 +98,14 @@ export function Setup({ onStart, providerNote }: Props) {
           out loud.
         </p>
       </header>
+
+      <ProfilePicker
+        profiles={profiles}
+        selectedId={selectedId}
+        onSelect={selectProfile}
+        onNew={newChild}
+        onDelete={removeProfile}
+      />
 
       <form className="card" onSubmit={submit}>
         <div className="row">
@@ -120,6 +162,11 @@ export function Setup({ onStart, providerNote }: Props) {
             maxLength={300}
             placeholder="A cat exploring outer space. Or leave blank and let your child ask."
           />
+        </label>
+
+        <label className="checkbox">
+          <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+          <span>Remember {name.trim() || "this child"} on this device (name, age, interests, length)</span>
         </label>
 
         {error && <p className="error-text">{error}</p>}

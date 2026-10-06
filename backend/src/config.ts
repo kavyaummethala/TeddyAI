@@ -69,7 +69,8 @@ export const config = {
       .map((provider) => ({ provider, model: defaultModels[provider] })),
   },
   stt: { provider: pickStt() },
-  tts: { provider: pickTts(), voice: env("TTS_VOICE") ?? "sage" },
+  // Not readonly: switched to "browser" at runtime if the OpenAI key stops working.
+  tts: { provider: pickTts() as TtsProvider, voice: env("TTS_VOICE") ?? "sage" },
 };
 
 export function requireKey(name: keyof typeof keys): string {

@@ -5,7 +5,7 @@ import { nextSegment } from "../services/storyEngine";
 
 export const storyRouter = Router();
 
-const EVENTS: TurnEvent[] = ["child_spoke", "interrupted", "no_response", "continue"];
+const EVENTS: TurnEvent[] = ["child_spoke", "interrupted", "no_response", "continue", "wrap_up"];
 
 /** POST /api/story/start — validate the parent's setup and return a fresh StoryState. */
 storyRouter.post("/start", (req, res) => {
@@ -36,12 +36,17 @@ storyRouter.post("/start", (req, res) => {
 
 /** POST /api/story/turn — state + child's words in, next segment + updated state out. */
 storyRouter.post("/turn", async (req, res) => {
-  const { state, transcript, event } = req.body as Partial<TurnRequest>;
+  const { state, transcript, event, acknowledged } = req.body as Partial<TurnRequest>;
   if (!state?.pacing || !state.story) return res.status(400).json({ error: "Missing story state." });
   if (!event || !EVENTS.includes(event)) return res.status(400).json({ error: "Invalid event." });
 
   try {
-    const result: TurnResponse = await nextSegment(state, String(transcript ?? "").slice(0, 500), event);
+    const result: TurnResponse = await nextSegment(
+      state,
+      String(transcript ?? "").slice(0, 500),
+      event,
+      acknowledged ? String(acknowledged).slice(0, 40) : undefined,
+    );
     res.json(result);
   } catch (err) {
     console.error("[story/turn]", err);

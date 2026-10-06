@@ -7,14 +7,21 @@
 //   (errors)                    story finished: FINISHED <-----------------+
 //
 // Tapping the mic while SPEAKING interrupts the narration and starts LISTENING.
+// Speed tricks (a child's attention span is short):
+//  - narration audio streams, so Teddy starts talking ~1s after the text is ready;
+//  - the moment the child's words are understood, Teddy says a quick "Ooh!" while the
+//    next part is being written;
+//  - while a segment that doesn't ask anything is playing, the next one is fetched in the
+//    background ("prefetch"), so there's no pause between them.
+//
 // Every async flow captures a "run id"; if the user has since moved on (interrupted,
 // retried, left), the stale flow sees a newer id and quietly stops.
 
 import { useEffect, useRef, useState } from "react";
-import type { AppConfig, StorySegment, StoryState, TurnEvent } from "../../../shared/types";
+import type { AppConfig, StorySegment, StoryState, TurnEvent, TurnResponse } from "../../../shared/types";
 import { takeTurn } from "../services/api";
 import { listen, MicError, type Listening } from "../services/listen";
-import { narrate, unlockAudio, type Narration } from "../services/narrator";
+import { narrate, preloadQuickReplies, quickReply, unlockAudio, type Narration } from "../services/narrator";
 
 export type SessionStatus = "ready" | "listening" | "thinking" | "speaking" | "finished";
 export type SessionError = { kind: "mic" | "stt" | "llm" | "tts"; message: string };
@@ -33,6 +40,7 @@ export function useStorySession(initialState: StoryState, config: AppConfig) {
   const [lastHeard, setLastHeard] = useState("");
   const [error, setError] = useState<SessionError | null>(null);
   const [micLevel, setMicLevel] = useState(0);
+  const [notice, setNotice] = useState("");
 
   const stateRef = useRef(initialState);
   const runId = useRef(0);
@@ -41,6 +49,12 @@ export function useStorySession(initialState: StoryState, config: AppConfig) {
   const lastSegment = useRef<StorySegment | null>(null);
   const pendingTurn = useRef<{ transcript: string; event: TurnEvent } | null>(null);
   const audioUnlocked = useRef(false);
+  /** Starts as the server's voice; drops to the browser's built-in voice if that stops working. */
+  const ttsMode = useRef(config.tts);
+  /** The next "continue" segment, requested early. Only valid if the story state hasn't changed since. */
+  const prefetch = useRef<{ basis: StoryState; response: Promise<TurnResponse> } | null>(null);
+
+  useEffect(() => preloadQuickReplies(config.tts), [config.tts]);
 
   // Stop everything if the screen unmounts mid-story.
   useEffect(
@@ -51,6 +65,13 @@ export function useStorySession(initialState: StoryState, config: AppConfig) {
     },
     [],
   );
+
+  /** The narrator voice service failed (expired key, no credits, offline): carry on with the built-in voice. */
+  function switchToDefaultVoice() {
+    ttsMode.current = "browser";
+    setNotice("Switching to the default voice");
+    setTimeout(() => setNotice(""), 6000);
+  }
 
   function fail(kind: SessionError["kind"]) {
     setError({ kind, message: MESSAGES[kind] });
@@ -68,25 +89,45 @@ export function useStorySession(initialState: StoryState, config: AppConfig) {
     const myRun = ++runId.current;
     setStatus("speaking");
     setError(null);
-    const n = narrate(segment.narration, segment.phase, config.tts);
+    const n = narrate(segment.narration, segment.phase, ttsMode.current);
     speaking.current = n;
+    // Nothing for the child to answer, so start writing the next part while this one plays.
+    if (!segment.askForResponse && !segment.finished && prefetch.current?.basis !== stateRef.current) {
+      const basis = stateRef.current;
+      const response = takeTurn(basis, "", "continue");
+      response.catch(() => {}); // a failed prefetch just means we ask again later
+      prefetch.current = { basis, response };
+    }
     try {
       const outcome = await n.done;
       if (myRun !== runId.current || outcome === "stopped") return;
       afterSegment(segment);
     } catch {
-      if (myRun === runId.current) fail("tts");
+      if (myRun !== runId.current) return;
+      if (ttsMode.current === "server" && "speechSynthesis" in window) {
+        switchToDefaultVoice();
+        speak(segment); // replay the same part in the built-in voice
+      } else {
+        fail("tts");
+      }
     }
   }
 
-  async function runTurn(transcript: string, event: TurnEvent) {
+  async function runTurn(transcript: string, event: TurnEvent, ack?: { text: string; narration: Narration }) {
     const myRun = ++runId.current;
     pendingTurn.current = { transcript, event };
     setStatus("thinking");
     setError(null);
+    const basis = stateRef.current;
+    const early = prefetch.current;
+    prefetch.current = null;
     try {
       // StoryState only changes after a successful turn, so a failure here loses nothing.
-      const res = await takeTurn(stateRef.current, transcript, event);
+      const res =
+        event === "continue" && early?.basis === basis
+          ? await early.response.catch(() => takeTurn(basis, "", "continue"))
+          : await takeTurn(basis, transcript, event, ack?.text);
+      if (ack) await ack.narration.done.catch(() => {}); // let the quick "Ooh!" finish first
       if (myRun !== runId.current) return;
       stateRef.current = res.state;
       setState(res.state);
@@ -115,7 +156,10 @@ export function useStorySession(initialState: StoryState, config: AppConfig) {
       if (myRun !== runId.current) return;
       if (text) {
         setLastHeard(text);
-        runTurn(text, event);
+        // Respond instantly so the child knows they were heard, while the story is written.
+        const ack = quickReply(stateRef.current.pacing.phase, ttsMode.current);
+        speaking.current = ack.narration;
+        runTurn(text, event, ack);
       } else if (afterQuestion) {
         runTurn("", "no_response");
       } else if (stateRef.current.pacing.segmentCount === 0) {
@@ -153,6 +197,17 @@ export function useStorySession(initialState: StoryState, config: AppConfig) {
     }
   }
 
+  /** "Finish story" button: whatever is happening, have Teddy tell a short, peaceful ending now. */
+  function finishStory() {
+    if (status === "finished") return;
+    runId.current++; // cancels anything in flight
+    speaking.current?.stop();
+    listening.current?.cancel();
+    prefetch.current = null;
+    if (stateRef.current.pacing.segmentCount === 0) return setStatus("finished"); // story hadn't started
+    runTurn("", "wrap_up");
+  }
+
   /** Retry whatever failed, without losing the story. */
   function retry() {
     if (!error) return;
@@ -170,5 +225,5 @@ export function useStorySession(initialState: StoryState, config: AppConfig) {
     else runTurn("", "continue");
   }
 
-  return { state, status, narration, lastHeard, error, micLevel, pressMic, retry, keepGoing };
+  return { state, status, narration, lastHeard, error, notice, micLevel, pressMic, retry, keepGoing, finishStory };
 }

@@ -1,5 +1,5 @@
 // All HTTP calls to our backend. API keys stay on the server; the browser never sees them.
-import type { AppConfig, ParentSetup, StoryPhase, StoryState, TurnEvent, TurnResponse } from "../../../shared/types";
+import type { AppConfig, ParentSetup, StoryState, TurnEvent, TurnResponse } from "../../../shared/types";
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const res = await fetch(url, {
@@ -22,8 +22,9 @@ export async function startStory(setup: ParentSetup): Promise<StoryState> {
   return (await postJson<{ state: StoryState }>("/api/story/start", setup)).state;
 }
 
-export function takeTurn(state: StoryState, transcript: string, event: TurnEvent) {
-  return postJson<TurnResponse>("/api/story/turn", { state, transcript, event });
+/** @param acknowledged the quick reply ("Ooh!") already spoken aloud, so the story doesn't repeat it */
+export function takeTurn(state: StoryState, transcript: string, event: TurnEvent, acknowledged?: string) {
+  return postJson<TurnResponse>("/api/story/turn", { state, transcript, event, acknowledged });
 }
 
 export async function transcribeAudio(audio: Blob): Promise<string> {
@@ -35,14 +36,4 @@ export async function transcribeAudio(audio: Blob): Promise<string> {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error ?? "Transcription failed");
   return data.transcript ?? "";
-}
-
-export async function synthesizeSpeech(text: string, phase: StoryPhase): Promise<Blob> {
-  const res = await fetch("/api/voice/speak", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, phase }),
-  });
-  if (!res.ok) throw new Error("Narration audio failed");
-  return res.blob();
 }

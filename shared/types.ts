@@ -61,7 +61,8 @@ export type TurnEvent =
   | "child_spoke" // child answered or made a request
   | "interrupted" // child tapped the mic while narration was playing
   | "no_response" // story asked a question but the child stayed quiet (maybe drifting off)
-  | "continue"; // previous segment didn't ask anything; keep going
+  | "continue" // previous segment didn't ask anything; keep going
+  | "wrap_up"; // the grown-up pressed "Finish story": end peacefully now
 
 export interface StorySegment {
   narration: string;
@@ -74,6 +75,8 @@ export interface TurnRequest {
   state: StoryState;
   transcript: string;
   event: TurnEvent;
+  /** A quick reply ("Ooh!") the app already spoke the instant the child finished talking. */
+  acknowledged?: string;
 }
 
 export interface TurnResponse {

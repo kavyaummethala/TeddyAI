@@ -18,12 +18,14 @@ export async function nextSegment(
   state: StoryState,
   transcript: string,
   event: TurnEvent,
+  acknowledged?: string,
 ): Promise<StoryTurnResult> {
   if (state.finished) throw new Error("This story has already finished.");
 
-  const phase = state.pacing.phase;
+  // "Finish story" jumps straight to the ending, whatever the pacing says.
+  const phase = event === "wrap_up" ? "ending" : state.pacing.phase;
   const canAsk = questionAllowed(state);
-  const prompt = buildTurnPrompt(state, transcript, event, phase, canAsk);
+  const prompt = buildTurnPrompt(state, transcript, event, phase, canAsk, acknowledged);
 
   // One retry covers most transient failures and the occasional malformed JSON reply.
   let update: StoryUpdate | null = null;
@@ -47,6 +49,9 @@ export async function nextSegment(
   if (!childSpoke) update.childWantsToEnd = false; // only the child can end the story early
   if (!canAsk) update.askForResponse = false;
   if (phase === "windDown" || phase === "ending" || update.childWantsToEnd) update.askForResponse = false;
+
+  // The app already said a quick "Ooh!" out loud; don't let the narration open with another one.
+  if (acknowledged) update.narration = stripLeadingInterjection(update.narration);
 
   const nextState = applyUpdate(state, phase, update, childSpoke);
 
@@ -109,6 +114,13 @@ export function parseStoryUpdate(raw: string): StoryUpdate {
     askForResponse: endsWithQuestion(narration),
     childWantsToEnd: obj.childWantsToEnd === true,
   };
+}
+
+/** "Oh! I love that!" -> "I love that!" (only strips short exclamations like Oh/Ooh/Hmm/Okay). */
+export function stripLeadingInterjection(narration: string): string {
+  const stripped = narration.replace(/^\s*(?:(?:oh+|o+h+|hmm+|mm+|okay|ok|wow|yay)\b[\s,!.…-]*)+/i, "");
+  if (stripped.length < 10) return narration; // never strip the whole thing
+  return stripped[0].toUpperCase() + stripped.slice(1);
 }
 
 /** True if one of the last two sentences is a question. */
