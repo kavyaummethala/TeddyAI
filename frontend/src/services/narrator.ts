@@ -70,10 +70,16 @@ const QUICK_REPLIES = {
 /** What Teddy says when the child calls its name mid-story. */
 const WAKE_REPLY = "Yes?";
 
+
 export function quickReply(phase: StoryPhase, mode: "server" | "browser"): { text: string; narration: Narration } {
   const options = phase === "interactive" || phase === "settling" ? QUICK_REPLIES.lively : QUICK_REPLIES.calm;
   const text = options[Math.floor(Math.random() * options.length)];
   return { text, narration: narrate(text, phase, mode, "reply") };
+}
+
+/** One of Teddy's own lines (a greeting, "I didn't catch that"), in the bright reply voice. */
+export function sayLine(text: string, phase: StoryPhase, mode: "server" | "browser"): Narration {
+  return narrate(text, phase, mode, "reply");
 }
 
 /** Teddy answering to its name ("Teddy!" -> "Yes?"). */
@@ -82,10 +88,10 @@ export function wakeReply(phase: StoryPhase, mode: "server" | "browser"): Narrat
 }
 
 /** Warm the browser cache so the first quick reply is instant too. */
-export function preloadQuickReplies(mode: "server" | "browser") {
+export function preloadQuickReplies(mode: "server" | "browser", extraLines: string[] = []) {
   if (mode !== "server") return;
   const all: [string, StoryPhase][] = [
-    ...[...QUICK_REPLIES.lively, WAKE_REPLY].map((text): [string, StoryPhase] => [text, "interactive"]),
+    ...[...QUICK_REPLIES.lively, WAKE_REPLY, ...extraLines].map((text): [string, StoryPhase] => [text, "interactive"]),
     ...[...QUICK_REPLIES.calm, WAKE_REPLY].map((text): [string, StoryPhase] => [text, "windDown"]),
   ];
   for (const [text, phase] of all) fetch(streamUrl(text, phase, "reply")).catch(() => {});

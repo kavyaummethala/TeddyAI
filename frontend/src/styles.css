@@ -283,6 +283,15 @@ textarea::placeholder {
   border-style: dashed;
 }
 
+.error-detail {
+  white-space: pre-wrap;
+  font-size: 0.8rem;
+  color: var(--danger);
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 10px;
+}
+
 .error-text {
   color: var(--danger);
   margin: 0;
@@ -371,9 +380,27 @@ textarea::placeholder {
 }
 
 .hint {
-  margin: -12px 0 0;
+  margin: -8px 0 0;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(185, 167, 255, 0.12);
+  border: 1px solid rgba(185, 167, 255, 0.4);
+  color: var(--text);
+  font-size: 0.95rem;
+  text-align: center;
+  animation: hint-in 0.6s ease-out;
+}
+.hint--quiet {
+  background: none;
+  border-color: transparent;
   color: var(--muted);
   font-size: 0.85rem;
+}
+@keyframes hint-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
 }
 
 .pill {

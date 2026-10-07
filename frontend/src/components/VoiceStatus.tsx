@@ -12,7 +12,7 @@ export function VoiceStatus({ status, childName, isStart }: Props) {
     ready: isStart ? `Hi ${childName}! Tap me and tell me a story idea` : "Tap Teddy to talk",
     listening: "Listening…",
     thinking: "Thinking…",
-    speaking: "Telling your story…",
+    speaking: isStart ? `Hi ${childName}!` : "Telling your story…",
     finished: `Goodnight, ${childName}`,
   };
   return (

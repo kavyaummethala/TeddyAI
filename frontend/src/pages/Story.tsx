@@ -7,6 +7,7 @@ import { StoryMemoryPanel } from "../components/StoryMemoryPanel";
 import { VoiceStatus } from "../components/VoiceStatus";
 import { useStorySession } from "../hooks/useStorySession";
 import { listNames } from "../services/format";
+import { isWakeWordSupported } from "../services/wakeWord";
 import { rememberStory, type ChildProfile } from "../services/profiles";
 
 interface Props {
@@ -27,6 +28,7 @@ export function Story({ initialState, config, profiles, currentProfileIds, story
   const { state, status, error } = session;
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const names = listNames(state.children.map((c) => c.name));
+  const wakeWord = isWakeWordSupported();
 
   // Remember tonight's story in each child's profile, so the next one is different.
   const { title, characters } = state.story;
@@ -75,7 +77,12 @@ export function Story({ initialState, config, profiles, currentProfileIds, story
       <section className="story__center">
         <MicrophoneButton status={status} phase={state.pacing.phase} level={session.micLevel} onPress={session.pressMic} />
         <VoiceStatus status={status} childName={names} isStart={state.pacing.segmentCount === 0} />
-        {status === "speaking" && <p className="hint">Say “Teddy” or tap to talk</p>}
+        {status === "speaking" && state.pacing.segmentCount > 0 && (
+          <p className="hint">{wakeWord ? <>💬 Want to say something? Just say “Teddy!”</> : <>💬 Tap Teddy to say something</>}</p>
+        )}
+        {status === "ready" && state.pacing.segmentCount === 0 && wakeWord && (
+          <p className="hint hint--quiet">During the story, say “Teddy!” to talk to me</p>
+        )}
 
         {error && (
           <div className="error-box" role="alert">

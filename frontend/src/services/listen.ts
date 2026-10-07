@@ -47,6 +47,11 @@ async function getMic(): Promise<MediaStream> {
   }
 }
 
+/** Ask for the microphone early (when the parent taps Start), so the permission prompt doesn't land on the child. */
+export function warmUpMic() {
+  getMic().catch(() => {});
+}
+
 function pickMimeType(): string | undefined {
   const types = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"];
   return types.find((t) => MediaRecorder.isTypeSupported(t));

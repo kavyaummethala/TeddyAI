@@ -53,7 +53,7 @@ storyRouter.post("/turn", async (req, res) => {
       state,
       String(transcript ?? "").slice(0, 500),
       event,
-      acknowledged ? String(acknowledged).slice(0, 40) : undefined,
+      acknowledged ? String(acknowledged).slice(0, 200) : undefined,
     );
     res.json(result);
   } catch (err) {

@@ -1,7 +1,10 @@
 import { useState } from "react";
 import type { ChildInfo, ParentSetup } from "../../../shared/types";
 import { ProfilePicker } from "../components/ProfilePicker";
+import { warmUpChimes } from "../services/chime";
 import { listNames } from "../services/format";
+import { warmUpMic } from "../services/listen";
+import { unlockAudio } from "../services/narrator";
 import {
   deleteProfile,
   lastDuration,
@@ -97,6 +100,11 @@ export function Setup({ onStart, preselect, providerNote }: Props) {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    // This tap is the parent's: use it to allow sound and ask for the mic now, so Teddy can greet
+    // the child out loud as soon as the story screen opens.
+    unlockAudio();
+    warmUpChimes();
+    warmUpMic();
     setBusy(true);
     setError("");
     try {

@@ -28,6 +28,30 @@ Parents who work late, travel, or are caring for another child miss bedtime stor
 
 After the setup screen, nothing requires reading. Every state is conveyed by Teddy's face and the narrator's voice, and the child can interrupt without touching the screen by calling Teddy's name.
 
+### Designed for children who can't read
+
+Most children who need a bedtime story can't read yet, so **anything the child needs to know is said out loud**, not just shown on screen. Text on the story screen is only for the grown-up.
+
+| Moment | What the child hears / sees |
+|---|---|
+| Story screen opens | Teddy greets them by name and asks what the story should be about, suggesting their own interests: *"Hi Mia! I'm Teddy, and I'm going to tell you a bedtime story. What should it be about? Maybe space, or cats? Or anything you like!"* Then it listens on its own; no tap needed. If the parent typed a story idea, Teddy announces it and starts instead. |
+| Child's turn to talk | A soft rising "ding-ding" chime, and Teddy's ears perk up and move with their voice. |
+| Teddy heard them | A falling "ding-ding", then an instant spoken reaction ("Ooh, good one!") while the story is written. |
+| First answer | Teddy teaches the one rule that matters: *"…if you want to tell me something during the story, just say, Teddy!"* |
+| Child stays quiet at the start | *"That's okay! I'll pick a story for you."* |
+| Teddy couldn't hear them | *"Hmm, I didn't catch that. Can you say it again?"* After a second miss: *"That's okay! Let's keep going with our story."* No error screen. |
+| Story engine hiccup | One quiet automatic retry first. Only if that fails: *"Oops, my story got a little tangled. A grown-up can help me try again."* (the grown-up sees a retry button). |
+| Talking / thinking / sleepy / finished | Teddy's mouth moves; it tilts its head and looks up; eyes grow heavy in Wind Down; it falls asleep with floating z's at the end. |
+
+Problems only a grown-up can fix (microphone permission blocked) are shown as text. And the microphone permission prompt appears when the **parent** presses Start, not later in the child's hands. All of Teddy's non-story lines live in `frontend/src/services/teddyLines.ts`; the chimes are generated with Web Audio in `frontend/src/services/chime.ts` (no audio files).
+
+**Ideas not built yet:**
+- **The parent's own voice for the greeting**: the parent records "Hi Mia, Teddy's going to tell you a story tonight. I love you!" once, and it plays at the start (no voice cloning needed).
+- **A first-time practice round**: the very first time a child uses Teddy, a 20-second game ("Can you say *Teddy*? Great! That's how you talk to me").
+- **Picture choices for the youngest**: when Teddy offers a choice, show two big pictures the child can tap (helpful for 2–3 year olds who don't answer out loud yet).
+- **Adaptive patience**: wait longer for younger children to answer, and re-ask more simply ("Blue door, or silver door?") if they seem unsure.
+- **A sound signature for each state**: a soft page-turn sound when the story continues and a lullaby tone when Wind Down begins, so the change in pace is felt, not read.
+
 ## 4. Architecture
 
 ```mermaid
@@ -210,6 +234,7 @@ Most conversational AI optimizes for engagement. Teddy follows the opposite curv
 - **On-device wake word** (e.g. a small keyword-spotting model) so listening for "Teddy" never leaves the device.
 - **Story memory across nights**: "Yesterday Luna discovered the Moon Garden…"
 - **Parent dashboard** with privacy-conscious summaries, not transcripts.
+- **Parent-recorded greeting, a first-time practice round, picture choices, and adaptive patience** for the youngest listeners (see "Designed for children who can't read").
 - **Profiles that sync across devices** (needs accounts), and a bedtime routine: story → breathing exercise → calm sounds → goodnight.
 - **Gentle vocal adaptation** (pace/energy, not emotion inference): calmer narration for a restless child.
 

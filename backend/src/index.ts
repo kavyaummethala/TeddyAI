@@ -18,6 +18,12 @@ app.get("/api/config", (_req, res) => {
   };
   res.json(body);
 });
+// Browser errors, printed here so problems on the device show up in the terminal.
+app.post("/api/client-error", (req, res) => {
+  const { where, message, stack } = req.body ?? {};
+  console.warn(`\n[browser error: ${String(where).slice(0, 20)}] ${String(message).slice(0, 300)}\n${String(stack ?? "").slice(0, 800)}\n`);
+  res.sendStatus(204);
+});
 app.use("/api/story", storyRouter);
 app.use("/api/speech", speechRouter);
 app.use("/api/voice", voiceRouter);
