@@ -1,77 +1,97 @@
 import { useState } from "react";
-import type { ParentSetup } from "../../../shared/types";
+import type { ChildInfo, ParentSetup } from "../../../shared/types";
 import { ProfilePicker } from "../components/ProfilePicker";
-import { deleteProfile, lastUsedProfileId, loadProfiles, saveProfile, type ChildProfile } from "../services/profiles";
+import { listNames } from "../services/format";
+import {
+  deleteProfile,
+  lastDuration,
+  lastUsedProfileId,
+  loadProfiles,
+  rememberDuration,
+  saveProfile,
+  type ChildProfile,
+} from "../services/profiles";
 
 interface Props {
-  /** profileId is the saved child profile this story is for (null if not saved). */
-  onStart: (setup: ParentSetup, profileId: string | null) => Promise<void>;
-  /** Which child to show first: a profile id, "new" for a blank form, or undefined for the last used. */
-  preselect?: string;
+  /** profileIds are the saved children this story is for (empty if not saved). */
+  onStart: (setup: ParentSetup, profileIds: string[]) => Promise<void>;
+  /** Which children to select first: profile ids, "new" for a blank form, or undefined for the last used. */
+  preselect?: string[] | "new";
   providerNote?: string;
 }
 
-const DEMO: ParentSetup = {
+const MIN_MINUTES = 1;
+const MAX_MINUTES = 15;
+
+const DEMO = {
   childName: "Mia",
   childAge: 6,
   interests: ["space", "cats"],
   durationMinutes: 8,
   parentGoal: "Mia is nervous about starting school tomorrow. Help her feel more confident about trying unfamiliar things.",
-  storyRequest: "",
 };
 
-/** Screen 1: the parent sets things up before handing over the device. */
-export function Setup({ onStart, providerNote, preselect }: Props) {
-  // Start with the child who had the last story (or the first saved child), already filled in.
+/** Screen 1: the parent picks who's going to bed (one child or several) and sets up tonight's story. */
+export function Setup({ onStart, preselect, providerNote }: Props) {
   const [profiles, setProfiles] = useState(loadProfiles);
-  const initial =
-    preselect === "new"
-      ? null
-      : (profiles.find((p) => p.id === (preselect ?? lastUsedProfileId())) ?? profiles[0] ?? null);
 
-  const [selectedId, setSelectedId] = useState<string | null>(initial?.id ?? null);
-  const [name, setName] = useState(initial?.childName ?? "");
-  const [age, setAge] = useState(String(initial?.childAge ?? 6));
-  const [interests, setInterests] = useState(initial?.interests.join(", ") ?? "");
-  const [duration, setDuration] = useState(initial?.durationMinutes ?? 8);
+  const initialIds = (() => {
+    if (preselect === "new") return [];
+    const wanted = preselect ?? [lastUsedProfileId() ?? profiles[0]?.id];
+    return wanted.filter((id): id is string => !!id && profiles.some((p) => p.id === id));
+  })();
+  const first = profiles.find((p) => p.id === initialIds[0]);
+
+  const [selectedIds, setSelectedIds] = useState<string[]>(initialIds);
+  // Details form, used when the story is for one child (or a new one).
+  const [name, setName] = useState(first?.childName ?? "");
+  const [age, setAge] = useState(String(first?.childAge ?? 6));
+  const [interests, setInterests] = useState(first?.interests.join(", ") ?? "");
+  const [duration, setDuration] = useState(lastDuration() ?? first?.durationMinutes ?? 8);
   const [goal, setGoal] = useState("");
   const [request, setRequest] = useState("");
   const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  function selectProfile(p: ChildProfile) {
-    setSelectedId(p.id);
-    setName(p.childName);
-    setAge(String(p.childAge));
-    setInterests(p.interests.join(", "));
-    setDuration(p.durationMinutes);
+  const selected = selectedIds.map((id) => profiles.find((p) => p.id === id)).filter((p): p is ChildProfile => !!p);
+  const several = selected.length > 1;
+
+  function fillForm(p: ChildProfile | undefined) {
+    setName(p?.childName ?? "");
+    setAge(String(p?.childAge ?? 6));
+    setInterests(p?.interests.join(", ") ?? "");
+  }
+
+  /** Tapping a child adds them to (or removes them from) tonight's story. */
+  function toggleProfile(p: ChildProfile) {
+    const next = selectedIds.includes(p.id) ? selectedIds.filter((id) => id !== p.id) : [...selectedIds, p.id];
+    setSelectedIds(next);
+    if (next.length === 1) fillForm(profiles.find((x) => x.id === next[0]));
+    if (next.length === 0) fillForm(undefined);
     setGoal(""); // tonight's worries and ideas are per-night, never carried over
     setRequest("");
   }
 
   function newChild() {
-    setSelectedId(null);
-    setName("");
-    setAge("6");
-    setInterests("");
-    setDuration(8);
+    setSelectedIds([]);
+    fillForm(undefined);
     setGoal("");
     setRequest("");
   }
 
   function removeProfile(p: ChildProfile) {
     setProfiles(deleteProfile(p.id));
-    if (p.id === selectedId) newChild();
+    setSelectedIds((ids) => ids.filter((id) => id !== p.id));
   }
 
   function fillDemo() {
-    setSelectedId(null);
+    setSelectedIds([]);
     setName(DEMO.childName);
     setAge(String(DEMO.childAge));
     setInterests(DEMO.interests.join(", "));
     setDuration(DEMO.durationMinutes);
-    setGoal(DEMO.parentGoal ?? "");
+    setGoal(DEMO.parentGoal);
     setRequest("");
   }
 
@@ -79,25 +99,50 @@ export function Setup({ onStart, providerNote, preselect }: Props) {
     e.preventDefault();
     setBusy(true);
     setError("");
-    const child = {
-      childName: name.trim(),
-      childAge: Number(age),
-      interests: interests.split(",").map((s) => s.trim()).filter(Boolean),
-      durationMinutes: duration,
-    };
     try {
-      // Save first, so the story screen's sidebar can show this child among the others.
-      let profileId: string | null = null;
-      if (remember) {
-        saveProfile({ ...child, id: selectedId ?? undefined });
-        profileId = lastUsedProfileId();
+      let children: ChildInfo[];
+      let profileIds: string[];
+      if (several) {
+        children = selected.map((p) => ({ name: p.childName, age: p.childAge, interests: p.interests }));
+        profileIds = selected.map((p) => p.id);
+      } else {
+        const child = { name: name.trim(), age: Number(age), interests: interests.split(",").map((s) => s.trim()).filter(Boolean) };
+        children = [child];
+        profileIds = [];
+        // Save first, so the story screen's sidebar can list this child.
+        if (remember) {
+          const list = saveProfile({
+            id: selectedIds[0],
+            childName: child.name,
+            childAge: child.age,
+            interests: child.interests,
+            durationMinutes: duration,
+          });
+          setProfiles(list);
+          profileIds = [lastUsedProfileId()].filter((id): id is string => !!id);
+        }
       }
-      await onStart({ ...child, parentGoal: goal.trim(), storyRequest: request.trim() }, profileId);
+      // Recent stories these children heard, so tonight's story is different.
+      const recentStories = [
+        ...new Set(
+          loadProfiles()
+            .filter((p) => profileIds.includes(p.id))
+            .flatMap((p) => (p.recentStories ?? []).map((s) => s.text)),
+        ),
+      ].slice(-6);
+
+      rememberDuration(duration);
+      await onStart(
+        { children, durationMinutes: duration, parentGoal: goal.trim(), storyRequest: request.trim(), recentStories },
+        profileIds,
+      );
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
     }
   }
+
+  const minds = several ? "Anything on their minds?" : "Anything on their mind?";
 
   return (
     <main className="setup">
@@ -112,54 +157,86 @@ export function Setup({ onStart, providerNote, preselect }: Props) {
 
       <ProfilePicker
         profiles={profiles}
-        selectedId={selectedId}
-        onSelect={selectProfile}
+        selectedIds={selectedIds}
+        onToggle={toggleProfile}
         onNew={newChild}
         onDelete={removeProfile}
       />
 
       <form className="card" onSubmit={submit}>
-        <div className="row">
-          <label className="field">
-            <span>Child's name</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Mia" required maxLength={40} />
-          </label>
-          <label className="field field--small">
-            <span>Age</span>
-            <input type="number" min={2} max={12} value={age} onChange={(e) => setAge(e.target.value)} required />
-          </label>
-        </div>
+        {several ? (
+          <div className="together">
+            <p className="together__title">One story for {listNames(selected.map((p) => p.childName))}</p>
+            <ul>
+              {selected.map((p) => (
+                <li key={p.id}>
+                  <strong>{p.childName}</strong>, {p.childAge} · {p.interests.join(", ") || "any story"}
+                </li>
+              ))}
+            </ul>
+            <small className="muted">
+              Teddy uses words the youngest will understand, mixes in everyone's interests, and gives each child a turn to
+              choose. Tap a single child above to edit their details.
+            </small>
+          </div>
+        ) : (
+          <>
+            <div className="row">
+              <label className="field">
+                <span>Child's name</span>
+                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Mia" required maxLength={40} />
+              </label>
+              <label className="field field--small">
+                <span>Age</span>
+                <input type="number" min={2} max={12} value={age} onChange={(e) => setAge(e.target.value)} required />
+              </label>
+            </div>
+
+            <label className="field">
+              <span>Interests</span>
+              <input value={interests} onChange={(e) => setInterests(e.target.value)} placeholder="space, cats, dinosaurs" />
+            </label>
+          </>
+        )}
 
         <label className="field">
-          <span>Interests</span>
-          <input value={interests} onChange={(e) => setInterests(e.target.value)} placeholder="space, cats, dinosaurs" />
+          <span className="slider__label">
+            Story length <strong>{duration} min</strong>
+          </span>
+          <input
+            className="slider"
+            type="range"
+            min={MIN_MINUTES}
+            max={MAX_MINUTES}
+            step={1}
+            value={duration}
+            onChange={(e) => setDuration(Number(e.target.value))}
+            style={{ "--fill": `${((duration - MIN_MINUTES) / (MAX_MINUTES - MIN_MINUTES)) * 100}%` } as React.CSSProperties}
+          />
+          <span className="slider__ends muted">
+            <span>{MIN_MINUTES} min</span>
+            <span>{MAX_MINUTES} min</span>
+          </span>
         </label>
-
-        <fieldset className="field">
-          <span>Story length</span>
-          <div className="segmented">
-            {[5, 8, 10].map((m) => (
-              <button type="button" key={m} className={duration === m ? "active" : ""} onClick={() => setDuration(m)}>
-                {m} min
-              </button>
-            ))}
-          </div>
-        </fieldset>
 
         <label className="field">
           <span>
-            Anything on their mind? <em>(optional, private)</em>
+            {minds} <em>(optional, private)</em>
           </span>
           <textarea
             rows={3}
             value={goal}
             onChange={(e) => setGoal(e.target.value)}
             maxLength={600}
-            placeholder="She's nervous about her first day at a new school tomorrow. I'd like the story to reinforce being brave when trying something new."
+            placeholder={
+              several
+                ? "Leo is nervous about the dentist tomorrow, and Mia has been sharing her toys more. I'd love the story to celebrate both."
+                : "She's nervous about her first day at a new school tomorrow. I'd like the story to reinforce being brave when trying something new."
+            }
           />
           <small className="muted">
             Teddy weaves this into the story's themes, like a character who finds their courage. It's never said out loud,
-            and your child won't hear that you asked.
+            and your {several ? "children won't" : "child won't"} hear that you asked.
           </small>
         </label>
 
@@ -175,15 +252,17 @@ export function Setup({ onStart, providerNote, preselect }: Props) {
           />
         </label>
 
-        <label className="checkbox">
-          <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
-          <span>Remember {name.trim() || "this child"} on this device (name, age, interests, length)</span>
-        </label>
+        {!several && (
+          <label className="checkbox">
+            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+            <span>Remember {name.trim() || "this child"} on this device (name, age, interests, length)</span>
+          </label>
+        )}
 
         {error && <p className="error-text">{error}</p>}
 
         <button className="primary" disabled={busy}>
-          {busy ? "Getting ready…" : "Start Bedtime Story"}
+          {busy ? "Getting ready…" : several ? `Start story for ${listNames(selected.map((p) => p.childName))}` : "Start Bedtime Story"}
         </button>
         <button type="button" className="link" onClick={fillDemo}>
           Fill in demo (Mia, 6, space & cats)

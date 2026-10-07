@@ -1,10 +1,12 @@
+import type { ChildInfo } from "../../../shared/types";
+import { listNames } from "../services/format";
 import type { ChildProfile } from "../services/profiles";
 
 interface Props {
-  childName: string;
-  childAge: number;
+  /** Everyone hearing this story. */
+  listeners: ChildInfo[];
   profiles: ChildProfile[];
-  currentProfileId: string | null;
+  currentProfileIds: string[];
   storyInProgress: boolean;
   /** Mobile only: the sidebar is a drawer. On wide screens it's always visible. */
   open: boolean;
@@ -16,11 +18,12 @@ interface Props {
 
 /** Shows who tonight's story is for, and lets a parent with several children switch in one tap. */
 export function ChildSidebar(props: Props) {
-  const { childName, childAge, profiles, currentProfileId, storyInProgress, open, onClose } = props;
-  const others = profiles.filter((p) => p.id !== currentProfileId);
+  const { listeners, profiles, currentProfileIds, storyInProgress, open, onClose } = props;
+  const others = profiles.filter((p) => !currentProfileIds.includes(p.id));
+  const childName = listNames(listeners.map((c) => c.name));
 
   function switchTo(profileId: string | null, label: string) {
-    if (storyInProgress && !confirm(`End ${childName}'s story and set one up for ${label}?`)) return;
+    if (storyInProgress && !confirm(`End the story for ${childName} and set one up for ${label}?`)) return;
     props.onSwitchChild(profileId);
   }
 
@@ -36,15 +39,17 @@ export function ChildSidebar(props: Props) {
         </div>
 
         <p className="sidebar__label">Story for</p>
-        <div className="sidebar__current">
-          <span className="profile__avatar">{childName.charAt(0).toUpperCase()}</span>
-          <span className="profile__text">
-            <strong>{childName}</strong>
-            <small>Age {childAge}</small>
-          </span>
-        </div>
+        {listeners.map((c) => (
+          <div key={c.name} className="sidebar__current">
+            <span className="profile__avatar">{c.name.charAt(0).toUpperCase()}</span>
+            <span className="profile__text">
+              <strong>{c.name}</strong>
+              <small>Age {c.age}</small>
+            </span>
+          </div>
+        ))}
 
-        {others.length > 0 && <p className="sidebar__label">Other children</p>}
+        {others.length > 0 && <p className="sidebar__label">{currentProfileIds.length ? "Other children" : "Saved children"}</p>}
         <ul className="sidebar__list">
           {others.map((p) => (
             <li key={p.id}>

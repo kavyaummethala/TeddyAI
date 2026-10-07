@@ -10,7 +10,7 @@ Built for the Hiya Voice AI Challenge. Full build spec: [`docs/spec.md`](docs/sp
 
 ## 1. Product overview
 
-1. **The parent sets up tonight's story** (≈30 seconds the first time, two taps after that): child's name, age, interests, story length, and optionally something private on the child's mind ("nervous about starting school tomorrow"). Each child is saved as a profile on the device, so siblings are one tap away.
+1. **The parent sets up tonight's story** (≈30 seconds the first time, two taps after that): child's name, age, interests, story length, and optionally something private on the child's mind ("nervous about starting school tomorrow"). Each child is saved as a profile on the device, so siblings are one tap away, and tapping several children makes **one shared story**: written for the youngest one's level, mixing everyone's interests, with Teddy asking each child by name in turn. Story length is a 1–15 minute slider (1-minute stories are handy for testing).
 2. **The parent hands over the device.** The child sees a dark screen with Teddy, a friendly bear whose face shows what's happening: ears perk up while listening, mouth moves while talking, eyes grow heavy as the story winds down, and Teddy falls asleep at the end. A sidebar shows which child the story is for, and switches to a sibling in one tap.
 3. **The child just talks.** "Tell me a story about a cat that goes to space." Teddy narrates it aloud, occasionally offers a choice ("the blue door or the silver door?"), and accepts interruptions ("wait, make Cosmo purple!"), replying like a person would ("Ooh! A purple cat? I love that!") before carrying on. To interrupt, the child can tap Teddy or just say **"Teddy!"**: narration stops, Teddy says "Yes?", and listens. Vocabulary, sentence length, and plot complexity adapt to the child's age.
 4. **The story winds down by design.** Choices stop, narration slows, the screen dims, and the story ends peacefully with "Goodnight." The child can say "I'm done" or "I'm sleepy", or a grown-up can tap **Finish story**, and Teddy wraps up with a gentle ending instead of stopping mid-sentence.
@@ -130,13 +130,23 @@ Open http://localhost:5173, click **"Fill in demo"**, then **Start Bedtime Story
 
 The backend logs which provider is active for each step on startup. Keys never reach the browser: every AI call goes through `/api/*`.
 
-## 8. How StoryState works
+## 8. Keeping stories fresh
+
+Left alone, the model tells the same story every night (in testing, "Nova" was the hero in 4 of 4 stories, always a cat in a rocket among twinkling stars). Four things counter that (`backend/src/prompts/storySparks.ts`, `bedtimeStoryPrompt.ts`):
+
+- **A random spark per story:** a story kind (mystery, treasure hunt, helping a friend, a mix-up...), a surprise element (a teapot that only talks in rhyme...), and fresh hero names, fitted around the child's interests.
+- **A plot plan:** the opening segment writes 4–5 steps toward a clear goal; each later segment is told which step it's on, so the story moves forward instead of wandering.
+- **Repetition checks in code:** the backend counts overused words ("sparkling", "twinkling", "cozy"...) in the last few segments and bans the worn-out ones, and lists the questions already asked so choices vary.
+- **Recent stories per child:** each profile remembers its last few story titles and heroes, and the next story is told to be different.
+
+## 9. How StoryState works
 
 `StoryState` (`shared/types.ts`) is the story's memory, updated every turn:
 
-- **child**: name, age, interests
+- **children**: name, age, interests for each listener (one or more)
+- **spark**: tonight's random story kind, surprise, and hero names
 - **parentGoal**: private context that shapes themes and is never spoken
-- **story**: title, characters *with current traits* (`"Cosmo — a curious cat, now purple"`), setting, running summary, current scene, important events, **childChanges** (every change the child requested, kept for the rest of the story), and the last narration (so an interruption can resume mid-thought)
+- **story**: title, characters *with current traits* (`"Cosmo — a curious cat, now purple"`), setting, running summary, current scene, important events, **childChanges** (every change the child requested, kept for the rest of the story), the **plan** (plot steps), and the last few narrations (so an interruption can resume mid-thought, and repeated words can be detected)
 - **pacing**: target duration, estimated elapsed minutes, phase, segment count, words narrated, segments since the last question
 - **interactionCount**, **finished**
 
@@ -151,7 +161,7 @@ The reply is parsed tolerantly (strips code fences, extracts the outer `{…}`, 
 
 Open **"Story memory (for grown-ups)"** on the story screen to watch the state update live. It's useful in a demo.
 
-## 9. How Wind Down Mode works
+## 10. How Wind Down Mode works
 
 Most conversational AI optimizes for engagement. Teddy follows the opposite curve: **engage → immerse → calm → disengage → sleep.**
 
@@ -172,7 +182,7 @@ Most conversational AI optimizes for engagement. Teddy follows the opposite curv
 - The **screen** dims and every animation slows as the phase advances.
 - A child who stops answering isn't prompted again. The story simply continues and ends.
 
-## 10. Safety
+## 11. Safety
 
 - The system prompt forbids violence, frightening imagery, threatening villains, sexual content, drugs, insults, and dangerous behavior, and keeps conflicts small and resolvable.
 - Inappropriate requests are **playfully redirected** ("a monster? This one was a fluffy cloud monster who only wanted a hug") rather than refused or scolded.
@@ -181,7 +191,7 @@ Most conversational AI optimizes for engagement. Teddy follows the opposite curv
 - The "Teddy!" wake word uses the browser's built-in speech recognition while Teddy narrates. In Chrome this sends microphone audio to Google's speech service during narration, which is worth disclosing to parents (tapping always works as an alternative).
 - Privacy: audio is held in memory only for the transcription request and never stored. There is no database and no accounts. Story state lives in the browser tab.
 
-## 11. Current limitations
+## 12. Current limitations
 
 - Saved profiles live in this browser's localStorage: they don't sync between devices, and clearing site data removes them.
 - The "Teddy!" wake word depends on the browser's speech recognition (Chrome, Edge, Safari; not Firefox). Loud speakers right next to the mic, or a noisy room, can make it miss the name; tapping always works.
@@ -192,7 +202,7 @@ Most conversational AI optimizes for engagement. Teddy follows the opposite curv
 - Gemini's free tier may use requests to improve Google's products, which isn't appropriate for a production children's app (use a paid tier or another provider).
 - The offline `mock` story is scripted and only loosely responds to the child.
 
-## 12. Future improvements
+## 13. Future improvements
 
 - **Parent voice messages**: the story ends with the real parent's recorded "Goodnight Mia, I love you."
 - **Consented parent-voice narration**, with careful consent and security design.

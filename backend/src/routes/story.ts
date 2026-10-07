@@ -1,5 +1,5 @@
 import { Router } from "express";
-import type { ParentSetup, TurnEvent, TurnRequest, TurnResponse } from "../../../shared/types";
+import type { ChildInfo, ParentSetup, TurnEvent, TurnRequest, TurnResponse } from "../../../shared/types";
 import { createInitialState } from "../models/storyState";
 import { nextSegment } from "../services/storyEngine";
 
@@ -7,29 +7,37 @@ export const storyRouter = Router();
 
 const EVENTS: TurnEvent[] = ["child_spoke", "interrupted", "no_response", "continue", "wrap_up"];
 
+const cleanList = (v: unknown, max: number, maxLen: number) =>
+  (Array.isArray(v) ? v : [])
+    .map((s) => String(s).trim().slice(0, maxLen))
+    .filter(Boolean)
+    .slice(0, max);
+
 /** POST /api/story/start — validate the parent's setup and return a fresh StoryState. */
 storyRouter.post("/start", (req, res) => {
   const body = req.body as Partial<ParentSetup>;
-  const childName = String(body.childName ?? "").trim().slice(0, 40);
-  const childAge = Number(body.childAge);
   const durationMinutes = Number(body.durationMinutes);
+  const rawChildren = Array.isArray(body.children) ? body.children.slice(0, 4) : [];
 
-  if (!childName) return res.status(400).json({ error: "Please enter the child's name." });
-  if (!Number.isFinite(childAge) || childAge < 2 || childAge > 12)
-    return res.status(400).json({ error: "Age should be between 2 and 12." });
-  if (![5, 8, 10].includes(durationMinutes))
-    return res.status(400).json({ error: "Story length must be 5, 8, or 10 minutes." });
+  const children: ChildInfo[] = [];
+  for (const c of rawChildren) {
+    const name = String(c?.name ?? "").trim().slice(0, 40);
+    const age = Number(c?.age);
+    if (!name) return res.status(400).json({ error: "Please enter each child's name." });
+    if (!Number.isFinite(age) || age < 2 || age > 12)
+      return res.status(400).json({ error: `${name}'s age should be between 2 and 12.` });
+    children.push({ name, age, interests: cleanList(c?.interests, 8, 40) });
+  }
+  if (children.length === 0) return res.status(400).json({ error: "Choose at least one child." });
+  if (!Number.isInteger(durationMinutes) || durationMinutes < 1 || durationMinutes > 20)
+    return res.status(400).json({ error: "Story length must be 1 to 20 minutes." });
 
   const setup: ParentSetup = {
-    childName,
-    childAge,
+    children,
     durationMinutes,
-    interests: (Array.isArray(body.interests) ? body.interests : [])
-      .map((s) => String(s).trim())
-      .filter(Boolean)
-      .slice(0, 8),
     parentGoal: String(body.parentGoal ?? "").trim().slice(0, 600),
     storyRequest: String(body.storyRequest ?? "").trim().slice(0, 300),
+    recentStories: cleanList(body.recentStories, 6, 80),
   };
   res.json({ state: createInitialState(setup) });
 });

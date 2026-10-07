@@ -110,6 +110,7 @@ export function parseStoryUpdate(raw: string): StoryUpdate {
     currentScene: str(obj.currentScene),
     importantEvent: str(obj.importantEvent),
     childChange: str(obj.childChange),
+    plan: strList(obj.plan),
     // Only wait for an answer if the narration really asks one near the end: the flag alone isn't trusted.
     askForResponse: endsWithQuestion(narration),
     childWantsToEnd: obj.childWantsToEnd === true,

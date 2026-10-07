@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { AppConfig, StoryState } from "../../../shared/types";
 import { ChildSidebar } from "../components/ChildSidebar";
 import { MicrophoneButton } from "../components/MicrophoneButton";
@@ -6,22 +6,35 @@ import { StoryDisplay } from "../components/StoryDisplay";
 import { StoryMemoryPanel } from "../components/StoryMemoryPanel";
 import { VoiceStatus } from "../components/VoiceStatus";
 import { useStorySession } from "../hooks/useStorySession";
-import type { ChildProfile } from "../services/profiles";
+import { listNames } from "../services/format";
+import { rememberStory, type ChildProfile } from "../services/profiles";
 
 interface Props {
   initialState: StoryState;
   config: AppConfig;
   profiles: ChildProfile[];
-  currentProfileId: string | null;
+  /** Saved profiles of the children hearing this story. */
+  currentProfileIds: string[];
+  /** Unique per story, used to remember it in each child's recent stories. */
+  storyId: string;
   onExit: () => void;
   onSwitchChild: (profileId: string | null) => void;
 }
 
 /** Screen 2: dark, minimal, voice-first. The page itself gets dimmer as the story winds down. */
-export function Story({ initialState, config, profiles, currentProfileId, onExit, onSwitchChild }: Props) {
+export function Story({ initialState, config, profiles, currentProfileIds, storyId, onExit, onSwitchChild }: Props) {
   const session = useStorySession(initialState, config);
   const { state, status, error } = session;
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const names = listNames(state.children.map((c) => c.name));
+
+  // Remember tonight's story in each child's profile, so the next one is different.
+  const { title, characters } = state.story;
+  useEffect(() => {
+    if (!title || currentProfileIds.length === 0) return;
+    const hero = characters[0]?.split(/\s+[—-]\s+/)[0];
+    rememberStory(currentProfileIds, storyId, hero ? `${title} (hero: ${hero})` : title);
+  }, [title, characters, currentProfileIds, storyId]);
 
   return (
     <main className="story" data-phase={state.pacing.phase} data-status={status}>
@@ -32,10 +45,9 @@ export function Story({ initialState, config, profiles, currentProfileId, onExit
         </div>
       )}
       <ChildSidebar
-        childName={state.child.name}
-        childAge={state.child.age}
+        listeners={state.children}
         profiles={profiles}
-        currentProfileId={currentProfileId}
+        currentProfileIds={currentProfileIds}
         storyInProgress={status !== "finished" && state.pacing.segmentCount > 0}
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
@@ -44,8 +56,14 @@ export function Story({ initialState, config, profiles, currentProfileId, onExit
       />
       <header className="story__top">
         <button className="sidebar-toggle" onClick={() => setSidebarOpen(true)} aria-label="Show children">
-          <span className="profile__avatar profile__avatar--small">{state.child.name.charAt(0).toUpperCase()}</span>
-          Story for {state.child.name} ▾
+          <span className="avatar-stack">
+            {state.children.map((c) => (
+              <span key={c.name} className="profile__avatar profile__avatar--small">
+                {c.name.charAt(0).toUpperCase()}
+              </span>
+            ))}
+          </span>
+          Story for {names} ▾
         </button>
         {status !== "finished" && (
           <button className="pill" onClick={session.finishStory}>
@@ -56,7 +74,7 @@ export function Story({ initialState, config, profiles, currentProfileId, onExit
 
       <section className="story__center">
         <MicrophoneButton status={status} phase={state.pacing.phase} level={session.micLevel} onPress={session.pressMic} />
-        <VoiceStatus status={status} childName={state.child.name} isStart={state.pacing.segmentCount === 0} />
+        <VoiceStatus status={status} childName={names} isStart={state.pacing.segmentCount === 0} />
         {status === "speaking" && <p className="hint">Say “Teddy” or tap to talk</p>}
 
         {error && (

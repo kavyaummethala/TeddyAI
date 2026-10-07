@@ -9,21 +9,23 @@ export default function App() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [configError, setConfigError] = useState("");
   const [story, setStory] = useState<StoryState | null>(null);
-  const [profileId, setProfileId] = useState<string | null>(null);
-  /** Which child the setup screen should show when we go back to it. */
-  const [preselect, setPreselect] = useState<string | undefined>();
+  const [profileIds, setProfileIds] = useState<string[]>([]);
+  const [storyId, setStoryId] = useState("");
+  /** Which children the setup screen should select when we go back to it. */
+  const [preselect, setPreselect] = useState<string[] | "new" | undefined>();
 
   useEffect(() => {
     getConfig().then(setConfig, () => setConfigError("Can't reach the Teddy backend. Is `npm run dev` running?"));
   }, []);
 
-  async function handleStart(setup: ParentSetup, id: string | null) {
+  async function handleStart(setup: ParentSetup, ids: string[]) {
     const state = await startStory(setup);
-    setProfileId(id);
+    setProfileIds(ids);
+    setStoryId(crypto.randomUUID());
     setStory(state);
   }
 
-  function backToSetup(select: string | undefined) {
+  function backToSetup(select: string[] | "new" | undefined) {
     setPreselect(select);
     setStory(null);
   }
@@ -31,14 +33,15 @@ export default function App() {
   if (story && config) {
     return (
       <Story
-        // A new key per story so switching children always starts a fresh session.
-        key={story.child.name + story.pacing.targetDurationMinutes + String(profileId)}
+        // A new key per story so every story starts a fresh session.
+        key={storyId}
+        storyId={storyId}
         initialState={story}
         config={config}
         profiles={loadProfiles()}
-        currentProfileId={profileId}
-        onExit={() => backToSetup(profileId ?? undefined)}
-        onSwitchChild={(id) => backToSetup(id ?? "new")}
+        currentProfileIds={profileIds}
+        onExit={() => backToSetup(profileIds.length ? profileIds : undefined)}
+        onSwitchChild={(id) => backToSetup(id ? [id] : "new")}
       />
     );
   }
@@ -48,5 +51,12 @@ export default function App() {
     : config && config.llm.startsWith("mock")
       ? "Running in offline demo mode (scripted story). Add a GROQ_API_KEY to .env for real AI stories."
       : undefined;
-  return <Setup key={preselect ?? "default"} onStart={handleStart} providerNote={note} preselect={preselect} />;
+  return (
+    <Setup
+      key={preselect === undefined ? "default" : String(preselect)}
+      onStart={handleStart}
+      providerNote={note}
+      preselect={preselect}
+    />
+  );
 }

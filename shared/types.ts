@@ -2,14 +2,31 @@
 
 export type StoryPhase = "interactive" | "settling" | "windDown" | "ending";
 
-/** What the parent fills in on the setup screen. */
-export interface ParentSetup {
-  childName: string;
-  childAge: number;
+export interface ChildInfo {
+  name: string;
+  age: number;
   interests: string[];
+}
+
+/** What the parent fills in on the setup screen. One story can be for several children at once. */
+export interface ParentSetup {
+  children: ChildInfo[];
+  /** 1 to 20 minutes. */
   durationMinutes: number;
   parentGoal?: string;
   storyRequest?: string;
+  /** Recent stories these children heard ("Nova and the Moon Key"), so tonight's is different. */
+  recentStories?: string[];
+}
+
+/**
+ * A random starting point picked when the story begins. Without it, the model drifts to the
+ * same predictable story every night (same hero names, same rocket, same twinkling stars).
+ */
+export interface StorySpark {
+  kind: string;
+  surprise: string;
+  heroNames: string[];
 }
 
 /**
@@ -18,15 +35,14 @@ export interface ParentSetup {
  * A failed turn therefore never corrupts the story — the old state is simply reused.
  */
 export interface StoryState {
-  child: {
-    name: string;
-    age: number;
-    interests: string[];
-  };
+  /** Everyone listening. Usually one child; siblings can share a story. */
+  children: ChildInfo[];
 
   /** Private parent context. Shapes themes; never spoken to the child. */
   parentGoal?: string;
   storyRequest?: string;
+  recentStories?: string[];
+  spark: StorySpark;
 
   story: {
     title?: string;
@@ -38,8 +54,10 @@ export interface StoryState {
     importantEvents: string[];
     /** Changes the child asked for ("make Cosmo purple"); must persist for the rest of the story. */
     childChanges: string[];
-    /** The last narration, so the model can continue mid-thought after an interruption. */
-    lastNarration: string;
+    /** The plot written at the start: 4-5 steps toward a goal. Each segment moves one step on. */
+    plan: string[];
+    /** The last few narrations, to continue mid-thought after an interruption and to avoid repeating phrases. */
+    recentNarrations: string[];
   };
 
   pacing: {

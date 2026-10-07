@@ -1,6 +1,7 @@
 // StoryState creation, pacing, and updates. Pure functions — no I/O — so they're easy to reason about.
 
 import type { ParentSetup, StoryPhase, StoryState } from "../../../shared/types";
+import { pickSpark } from "../prompts/storySparks";
 
 /** Bedtime narration is slow; ~130 spoken words per minute. */
 const WORDS_PER_MINUTE = 130;
@@ -10,17 +11,22 @@ const MINUTES_PER_INTERACTION = 0.25;
 const PHASE_ORDER: StoryPhase[] = ["interactive", "settling", "windDown", "ending"];
 
 export function createInitialState(setup: ParentSetup): StoryState {
+  const recentStories = setup.recentStories?.length ? setup.recentStories : undefined;
   return {
-    child: { name: setup.childName, age: setup.childAge, interests: setup.interests },
+    children: setup.children,
     parentGoal: setup.parentGoal || undefined,
     storyRequest: setup.storyRequest || undefined,
+    recentStories,
+    // Don't suggest a hero named after a listener, or one from a recent story.
+    spark: pickSpark([...setup.children.map((c) => c.name), ...(recentStories ?? [])]),
     story: {
       characters: [],
       summary: "",
       currentScene: "",
       importantEvents: [],
       childChanges: [],
-      lastNarration: "",
+      plan: [],
+      recentNarrations: [],
     },
     pacing: {
       targetDurationMinutes: setup.durationMinutes,
@@ -70,7 +76,8 @@ export function questionAllowed(state: StoryState): boolean {
   const { phase, segmentsSinceQuestion, segmentCount } = state.pacing;
   if (segmentCount === 0) return false; // let the opening breathe
   if (phase === "interactive") return segmentsSinceQuestion >= 1;
-  if (phase === "settling") return segmentsSinceQuestion >= 3;
+  // Short stories (handy for testing) still get a choice or two.
+  if (phase === "settling") return segmentsSinceQuestion >= (state.pacing.targetDurationMinutes <= 3 ? 1 : 3);
   return false;
 }
 
@@ -85,6 +92,8 @@ export interface StoryUpdate {
   importantEvent?: string;
   childChange?: string;
   askForResponse: boolean;
+  /** The plot plan, written once in the opening segment. */
+  plan?: string[];
   /** The child said they're done / sleepy, so this segment is the ending. */
   childWantsToEnd?: boolean;
 }
@@ -114,7 +123,8 @@ export function applyUpdate(
       childChanges: update.childChange
         ? [...prev.story.childChanges, update.childChange]
         : prev.story.childChanges,
-      lastNarration: update.narration,
+      plan: prev.story.plan.length ? prev.story.plan : (update.plan ?? []).slice(0, 6),
+      recentNarrations: [...prev.story.recentNarrations, update.narration].slice(-3),
     },
     pacing: {
       ...prev.pacing,
