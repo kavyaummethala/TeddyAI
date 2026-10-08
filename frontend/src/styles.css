@@ -905,6 +905,14 @@ textarea::placeholder {
   margin: 0;
   padding-left: 18px;
 }
+.beat--done {
+  opacity: 0.55;
+  text-decoration: line-through;
+}
+.beat--now {
+  color: var(--moon);
+}
+
 .phases {
   display: flex;
   gap: 6px;

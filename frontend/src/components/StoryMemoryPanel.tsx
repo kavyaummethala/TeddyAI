@@ -30,14 +30,20 @@ export function StoryMemoryPanel({ state }: { state: StoryState }) {
           {state.interactionCount} child interactions
         </p>
         {story.title && <Field label="Title">{story.title}</Field>}
-        {story.plan.length > 0 && (
-          <Field label="Plot plan">
-            <ol>
-              {story.plan.map((step, i) => (
-                <li key={i}>{step}</li>
-              ))}
-            </ol>
-          </Field>
+        {story.plan && (
+          <>
+            <Field label="What's on their mind, in the story">{story.plan.heroWorry || "—"}</Field>
+            <Field label="What helps">{story.plan.comfort || "—"}</Field>
+            <Field label="Plot plan">
+              <ol>
+                {story.plan.beats.map((b, i) => (
+                  <li key={i} className={i < story.beatIndex ? "beat--done" : i === story.beatIndex ? "beat--now" : undefined}>
+                    {b.happens} <span className="muted">({b.heroFeels})</span>
+                  </li>
+                ))}
+              </ol>
+            </Field>
+          </>
         )}
         {story.characters.length > 0 && <Field label="Characters">{story.characters.join(" · ")}</Field>}
         {story.childChanges.length > 0 && <Field label="Changes the child made">{story.childChanges.join(" · ")}</Field>}

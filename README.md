@@ -117,7 +117,7 @@ frontend/src/
 |---|---|---|
 | Frontend | React + TypeScript + Vite, plain CSS | Fast to build, no UI framework needed for two screens |
 | Backend | Node + Express (TypeScript, run with `tsx`) | One language end-to-end; StoryState types shared directly |
-| Story LLM | **Groq `openai/gpt-oss-120b`** (free tier), auto-fallback to **Gemini 3.5 Flash** | ~1 s per segment in testing; Gemini free tier was often overloaded (503s), so it is the backup |
+| Story LLM | **OpenAI `gpt-5.4-mini`** (planner + narrator), `gpt-4.1-mini` for quick rewrites; free fallbacks **Groq `gpt-oss-120b`** then **Gemini** | In a side-by-side test of the same stories, gpt-5.4-mini told clearly the best stories (~2 s per segment); Groq's free model produced garbled sentences and hit its 8k tokens/minute limit |
 | Speech-to-text | **Groq Whisper large-v3-turbo** (free tier) | Very fast, accurate; Chrome Web Speech API as a no-key fallback |
 | Text-to-speech | **OpenAI `gpt-4o-mini-tts`** (optional, paid) | Warm voice that accepts delivery instructions ("slower, softer…"); browser voices as a free fallback |
 | Provider SDKs | None (plain `fetch`) | Fewer dependencies; each provider is ~20 lines and easy to swap |
@@ -142,9 +142,9 @@ Open http://localhost:5173, click **"Fill in demo"**, then **Start Bedtime Story
 
 | Variable | Required? | Purpose |
 |---|---|---|
-| `GEMINI_API_KEY` | Recommended (free) | Backup story engine. Get at https://aistudio.google.com/apikey |
-| `GROQ_API_KEY` | Recommended (free) | Main story engine + speech-to-text (Whisper). Get at https://console.groq.com/keys |
-| `OPENAI_API_KEY` | Optional (paid) | High-quality narration voice (~10–15¢ per 8-min story) |
+| `GEMINI_API_KEY` | Optional (free) | Backup story engine. Get at https://aistudio.google.com/apikey |
+| `GROQ_API_KEY` | Recommended (free) | Speech-to-text (Whisper) + backup story engine. Get at https://console.groq.com/keys |
+| `OPENAI_API_KEY` | Recommended (paid) | Story engine (best quality) and narration voice. Without it, the free Groq/Gemini models tell noticeably weaker stories |
 | `LLM_PROVIDER` | Optional | `gemini` \| `groq` \| `openai` \| `mock`. Auto-selected from keys if blank |
 | `LLM_MODEL` | Optional | Override the default model |
 | `STT_PROVIDER` | Optional | `groq` \| `openai` \| `browser` |
@@ -154,14 +154,36 @@ Open http://localhost:5173, click **"Fill in demo"**, then **Start Bedtime Story
 
 The backend logs which provider is active for each step on startup. Keys never reach the browser: every AI call goes through `/api/*`.
 
-## 8. Keeping stories fresh
+## 8. Story quality: a planner, then a narrator
+
+Early versions drifted from scene to scene describing things, and the parent's concern showed up only as a moral announced at the end ("She was not worried anymore"). Each story is now made in two steps (`backend/src/services/storyEngine.ts`):
+
+1. **Planner** (one slower, "think harder" model call before the first segment, `prompts/storyPlanPrompt.ts`). It writes an outline: the hero, **the hero's own version of what's on the child's mind** (scared of the dark → a little dinosaur who doesn't want the lamp off), what helps, and 3–7 beats depending on length. Each beat names what *happens* and what the hero *feels*: the worry shown → a gentle setback → one small brave step → proof the worry was smaller than it felt → calm and sleepy. When the parent shared a concern, it outranks the random story spark.
+2. **Narrator** (every segment, `prompts/bedtimeStoryPrompt.ts`). It's told which beat is NOW and must make it happen through action and dialogue, then reports `beatDone`. Code keeps it on pace (it's told when it's behind), and once every beat has happened the next segment is the ending, so the story never pads.
+
+**Simple, like a picture book.** The planner keeps to the hero, one friend, one main place, and only things that matter to the plot. A parent's concern is turned into a *feeling and a simple situation*, never the adult details: "Dad is at a conference in Chicago for two weeks and the time difference makes calls hard" becomes a little cat who misses her papa at bedtime. The narrator reads the **whole story so far** each turn, so it flows as one tale and opens like a storybook (who, where, what they want).
+
+**Reading level is checked in code, not just requested** (`backend/src/services/readability.ts`). Each age group has limits on average sentence length and on long, hard words:
+
+| Age | Max words per sentence (average) | Hard words |
+|---|---|---|
+| 2–4 | 8 | ≤ 4% |
+| 5–6 | 11 | ≤ 7% |
+| 7–8 | 15 | ≤ 11% |
+| 9–12 | not checked | richer vocabulary allowed |
+
+If a segment comes back too hard for the **youngest** listener, a quick second pass (on a smaller, faster model) rewrites it in simpler words, keeping the same events and any question to the child. The rewrite is rejected if it isn't actually simpler or if it chops the text into fragments. Example from testing: an age-6 segment went from 12 to 5 words per sentence.
+
+The narrator also follows **show, don't tell**: feelings come through what the hero does and says (*"His ears drooped. 'What if nobody plays with me?'"* … *"May I play?"* … *"Yes, please! My name is Pip."*), never as announced lessons, and "felt safe/brave/happy" is limited to once per story. The grown-ups' Story memory panel shows the outline, the hero's worry, what helps, and which beat the story is on.
+
+## 8b. Keeping stories fresh
 
 Left alone, the model tells the same story every night (in testing, "Nova" was the hero in 4 of 4 stories, always a cat in a rocket among twinkling stars). Four things counter that (`backend/src/prompts/storySparks.ts`, `bedtimeStoryPrompt.ts`):
 
-- **A random spark per story:** a story kind (mystery, treasure hunt, helping a friend, a mix-up...), a surprise element (a teapot that only talks in rhyme...), and fresh hero names, fitted around the child's interests.
-- **A plot plan:** the opening segment writes 4–5 steps toward a clear goal; each later segment is told which step it's on, so the story moves forward instead of wandering.
-- **Repetition checks in code:** the backend counts overused words ("sparkling", "twinkling", "cozy"...) in the last few segments and bans the worn-out ones, and lists the questions already asked so choices vary.
-- **Recent stories per child:** each profile remembers its last few story titles and heroes, and the next story is told to be different.
+- **A random spark per story:** a story shape (mystery, treasure hunt, helping a friend...) used only when the parent didn't share a concern, plus fresh hero names.
+- **A plot plan:** see the planner above; every segment advances the story by a beat.
+- **Repetition checks in code:** the backend counts overused words ("sparkling", "twinkling", "cozy"...) and three-word phrases repeated across segments ("felt safe and warm") and bans them for the next segment, and lists the questions already asked so choices vary.
+- **Fresh heroes per child:** each profile remembers the hero names of its last few stories, and code picks a different name next time. (Past stories are deliberately *not* shown to the model: when they were, it borrowed details from them.)
 
 ## 9. How StoryState works
 
@@ -220,6 +242,7 @@ Most conversational AI optimizes for engagement. Teddy follows the opposite curv
 - Saved profiles live in this browser's localStorage: they don't sync between devices, and clearing site data removes them.
 - The "Teddy!" wake word depends on the browser's speech recognition (Chrome, Edge, Safari; not Firefox). Loud speakers right next to the mic, or a noisy room, can make it miss the name; tapping always works.
 - Elapsed time is an estimate from word counts, not wall-clock time.
+- Groq's free tier allows 8,000 tokens per minute per model, and each story segment uses several thousand. The app spreads work across Groq's large and small models and falls back to Gemini, but stories told back to back can still slow down. A paid Groq tier (cents per story) removes this.
 - The story text isn't streamed from the LLM, so after the quick "Ooh!" there's still a ~2–3 s pause before the story continues. Streaming the LLM's first sentence straight into TTS would cut this further.
 - The volume-based voice detector can be fooled by loud background noise. Tapping the moon always ends listening manually.
 - Browser speech recognition fallback works only in Chrome. Browser TTS voices vary by OS.

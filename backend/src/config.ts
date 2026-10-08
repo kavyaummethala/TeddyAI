@@ -27,10 +27,11 @@ const keys = {
 function pickLlm(): LlmProvider {
   const chosen = env("LLM_PROVIDER") as LlmProvider | undefined;
   if (chosen) return chosen;
-  // Groq first: in testing it answered in ~1s with no errors, while Gemini's free tier was often overloaded.
+  // OpenAI first: in a side-by-side test it told by far the best stories (Groq's free model produced
+  // garbled sentences and hit rate limits). Groq and Gemini are free fallbacks.
+  if (keys.openai) return "openai";
   if (keys.groq) return "groq";
   if (keys.gemini) return "gemini";
-  if (keys.openai) return "openai";
   return "mock";
 }
 
@@ -49,10 +50,12 @@ function pickTts(): TtsProvider {
 }
 
 const llmProvider = pickLlm();
+const SMALL_GROQ_MODEL = "openai/gpt-oss-20b";
+const SMALL_OPENAI_MODEL = "gpt-4.1-mini";
 const defaultModels: Record<LlmProvider, string> = {
   gemini: "gemini-3.5-flash",
   groq: "openai/gpt-oss-120b",
-  openai: "gpt-4o-mini",
+  openai: "gpt-5.4-mini",
   mock: "scripted",
 };
 
@@ -64,9 +67,20 @@ export const config = {
     provider: llmProvider,
     model: env("LLM_MODEL") ?? defaultModels[llmProvider],
     // If the main provider fails (overloaded, rate-limited, down), try every other provider we have a key for.
-    fallbacks: (["groq", "gemini", "openai"] as const)
-      .filter((p) => p !== llmProvider && llmProvider !== "mock" && keys[p])
-      .map((provider) => ({ provider, model: defaultModels[provider] })),
+    // Groq's free rate limit is per model, so when Groq is the main engine its smaller model is tried
+    // first: it's fast and has its own allowance.
+    fallbacks: [
+      ...(keys.groq && llmProvider === "groq" ? [{ provider: "groq" as const, model: SMALL_GROQ_MODEL }] : []),
+      ...(["groq", "gemini", "openai"] as const)
+        .filter((p) => p !== llmProvider && llmProvider !== "mock" && keys[p])
+        .map((provider) => ({ provider, model: defaultModels[provider] })),
+    ],
+    /** A smaller, faster model for simple jobs (like rewriting a segment in simpler words). */
+    small: keys.openai
+      ? { provider: "openai" as const, model: SMALL_OPENAI_MODEL }
+      : keys.groq
+        ? { provider: "groq" as const, model: SMALL_GROQ_MODEL }
+        : undefined,
   },
   stt: { provider: pickStt() },
   // Not readonly: switched to "browser" at runtime if the OpenAI key stops working.

@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { ChildInfo, ParentSetup, TurnEvent, TurnRequest, TurnResponse } from "../../../shared/types";
 import { createInitialState } from "../models/storyState";
 import { nextSegment } from "../services/storyEngine";
+import { logTurn } from "../services/turnLog";
 
 export const storyRouter = Router();
 
@@ -37,7 +38,7 @@ storyRouter.post("/start", (req, res) => {
     durationMinutes,
     parentGoal: String(body.parentGoal ?? "").trim().slice(0, 600),
     storyRequest: String(body.storyRequest ?? "").trim().slice(0, 300),
-    recentStories: cleanList(body.recentStories, 6, 80),
+    recentHeroes: cleanList(body.recentHeroes, 10, 30),
   };
   res.json({ state: createInitialState(setup) });
 });
@@ -55,6 +56,7 @@ storyRouter.post("/turn", async (req, res) => {
       event,
       acknowledged ? String(acknowledged).slice(0, 200) : undefined,
     );
+    logTurn({ event, heard: String(transcript ?? ""), result });
     res.json(result);
   } catch (err) {
     console.error("[story/turn]", err);

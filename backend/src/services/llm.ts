@@ -5,13 +5,31 @@ import { config, requireKey } from "../config";
 
 type Target = { provider: string; model: string };
 
-/** Tries the main provider, then each fallback, so one overloaded provider doesn't stop the story. */
-export async function generateText(system: string, prompt: string): Promise<string> {
-  const targets: Target[] = [config.llm, ...config.llm.fallbacks];
+/** "low" for fast story turns; "medium" when quality matters more than speed (planning the story). */
+export type Effort = "low" | "medium";
+
+/**
+ * Tries the main provider, then each fallback, so one overloaded provider doesn't stop the story.
+ * size "small" starts with the small model, for simple jobs that don't need the big one.
+ */
+/** Which model answered the most recent request (for the debug log). */
+export let lastModelUsed = "";
+
+export async function generateText(
+  system: string,
+  prompt: string,
+  effort: Effort = "low",
+  size: "main" | "small" = "main",
+): Promise<string> {
+  const chain: Target[] = [config.llm, ...config.llm.fallbacks];
+  const small = config.llm.small;
+  const targets = size === "small" && small ? [small, ...chain.filter((t) => t.model !== small.model)] : chain;
   let lastError: unknown;
   for (const target of targets) {
     try {
-      return await callProvider(target, system, prompt);
+      const text = await callProvider(target, system, prompt, effort);
+      if (size === "main") lastModelUsed = `${target.provider}:${target.model}`;
+      return text;
     } catch (err) {
       lastError = err;
       console.warn(`[llm] ${target.provider} (${target.model}) failed: ${(err as Error).message.slice(0, 160)}`);
@@ -20,28 +38,28 @@ export async function generateText(system: string, prompt: string): Promise<stri
   throw lastError;
 }
 
-function callProvider({ provider, model }: Target, system: string, prompt: string): Promise<string> {
+function callProvider({ provider, model }: Target, system: string, prompt: string, effort: Effort): Promise<string> {
   switch (provider) {
     case "gemini":
-      return gemini(model, system, prompt);
+      return gemini(model, system, prompt, effort);
     case "groq":
-      return openAiCompatible("https://api.groq.com/openai/v1", requireKey("groq"), model, system, prompt);
+      return openAiCompatible("https://api.groq.com/openai/v1", requireKey("groq"), model, system, prompt, effort);
     case "openai":
-      return openAiCompatible("https://api.openai.com/v1", requireKey("openai"), model, system, prompt);
+      return openAiCompatible("https://api.openai.com/v1", requireKey("openai"), model, system, prompt, effort);
     default:
       throw new Error(`Unknown LLM_PROVIDER "${provider}"`);
   }
 }
 
-async function gemini(model: string, system: string, prompt: string): Promise<string> {
+async function gemini(model: string, system: string, prompt: string, effort: Effort): Promise<string> {
   const generationConfig: Record<string, unknown> = {
     responseMimeType: "application/json",
     temperature: 0.9,
     maxOutputTokens: 2048,
   };
   // Flash models "think" by default, which adds seconds of latency we don't need for storytelling.
-  if (model.startsWith("gemini-2.5-flash")) generationConfig.thinkingConfig = { thinkingBudget: 0 };
-  else if (model.startsWith("gemini-3")) generationConfig.thinkingConfig = { thinkingLevel: "low" };
+  if (model.startsWith("gemini-2.5-flash")) generationConfig.thinkingConfig = { thinkingBudget: effort === "low" ? 0 : 1024 };
+  else if (model.startsWith("gemini-3")) generationConfig.thinkingConfig = { thinkingLevel: effort };
 
   const res = await fetchWithTimeout(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
@@ -62,17 +80,27 @@ async function gemini(model: string, system: string, prompt: string): Promise<st
   return text;
 }
 
+const REASONING = /gpt-oss|^gpt-5|^o\d/;
+
 /** Works for OpenAI and any OpenAI-compatible API (Groq, etc.). */
-async function openAiCompatible(baseUrl: string, apiKey: string, model: string, system: string, prompt: string) {
+async function openAiCompatible(
+  baseUrl: string,
+  apiKey: string,
+  model: string,
+  system: string,
+  prompt: string,
+  effort: Effort,
+) {
   const res = await fetchWithTimeout(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model,
-      temperature: 0.9,
       response_format: { type: "json_object" },
-      // gpt-oss models reason before answering; keep it short for low latency.
-      ...(model.includes("gpt-oss") ? { reasoning_effort: "low" } : {}),
+      // Reasoning models (gpt-oss, gpt-5.x, o-series) think before answering: keep it short for low
+      // latency. OpenAI's reasoning models don't accept a custom temperature.
+      ...(REASONING.test(model) ? { reasoning_effort: effort } : {}),
+      ...(/^(gpt-5|o\d)/.test(model) ? {} : { temperature: 0.9 }),
       messages: [
         { role: "system", content: system },
         { role: "user", content: prompt },

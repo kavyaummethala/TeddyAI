@@ -15,17 +15,36 @@ export interface ParentSetup {
   durationMinutes: number;
   parentGoal?: string;
   storyRequest?: string;
-  /** Recent stories these children heard ("Nova and the Moon Key"), so tonight's is different. */
-  recentStories?: string[];
+  /**
+   * Hero names from these children's recent stories. Used only by code to pick a fresh hero name;
+   * never shown to the model (listing old stories made it borrow details from them).
+   */
+  recentHeroes?: string[];
 }
 
 /**
  * A random starting point picked when the story begins. Without it, the model drifts to the
  * same predictable story every night (same hero names, same rocket, same twinkling stars).
  */
+/**
+ * The story outline, written by a separate planning step before the first segment. When the parent
+ * shared a worry, the hero lives through a story version of it, and each beat says what HAPPENS and
+ * what the hero FEELS, so the story has an emotional arc instead of drifting from scene to scene.
+ */
+export interface StoryPlan {
+  hero: string;
+  /** The hero's own version of what's on the child's mind, e.g. "first day at Moon School; worried nobody will play with her". */
+  heroWorry: string;
+  /** What the hero wants, concretely. */
+  goal: string;
+  /** What the hero discovers that helps, shown through events (never said as a moral). */
+  comfort: string;
+  beats: { happens: string; heroFeels: string }[];
+}
+
 export interface StorySpark {
+  /** A story shape, used only when the parent didn't share a concern (which then shapes the story). */
   kind: string;
-  surprise: string;
   heroNames: string[];
 }
 
@@ -41,7 +60,6 @@ export interface StoryState {
   /** Private parent context. Shapes themes; never spoken to the child. */
   parentGoal?: string;
   storyRequest?: string;
-  recentStories?: string[];
   spark: StorySpark;
 
   story: {
@@ -54,10 +72,12 @@ export interface StoryState {
     importantEvents: string[];
     /** Changes the child asked for ("make Cosmo purple"); must persist for the rest of the story. */
     childChanges: string[];
-    /** The plot written at the start: 4-5 steps toward a goal. Each segment moves one step on. */
-    plan: string[];
-    /** The last few narrations, to continue mid-thought after an interruption and to avoid repeating phrases. */
-    recentNarrations: string[];
+    /** The outline from the planning step (absent only if planning failed). */
+    plan?: StoryPlan;
+    /** Which beat of the plan the story has reached. */
+    beatIndex: number;
+    /** Every segment told so far, in order. The narrator reads the whole story so it flows as one tale. */
+    narrations: string[];
   };
 
   pacing: {

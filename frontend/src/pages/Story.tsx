@@ -34,8 +34,9 @@ export function Story({ initialState, config, profiles, currentProfileIds, story
   const { title, characters } = state.story;
   useEffect(() => {
     if (!title || currentProfileIds.length === 0) return;
-    const hero = characters[0]?.split(/\s+[—-]\s+/)[0];
-    rememberStory(currentProfileIds, storyId, hero ? `${title} (hero: ${hero})` : title);
+    // Only the hero's name is kept (to pick a different hero next time), never story details.
+    const hero = (state.story.plan?.hero ?? characters[0] ?? "").split(/[\s,—-]+/)[0];
+    if (hero) rememberStory(currentProfileIds, storyId, hero);
   }, [title, characters, currentProfileIds, storyId]);
 
   return (

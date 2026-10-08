@@ -7,7 +7,7 @@ export interface ChildProfile {
   childAge: number;
   interests: string[];
   durationMinutes: number;
-  /** The last few stories this child heard ("Gus and the Rhyming Teapot (hero: Gus)"), so new ones differ. */
+  /** Hero names from the last few stories this child heard, so the next hero is someone new. */
   recentStories?: { storyId: string; text: string }[];
 }
 

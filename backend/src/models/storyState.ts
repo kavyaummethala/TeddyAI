@@ -11,22 +11,20 @@ const MINUTES_PER_INTERACTION = 0.25;
 const PHASE_ORDER: StoryPhase[] = ["interactive", "settling", "windDown", "ending"];
 
 export function createInitialState(setup: ParentSetup): StoryState {
-  const recentStories = setup.recentStories?.length ? setup.recentStories : undefined;
   return {
     children: setup.children,
     parentGoal: setup.parentGoal || undefined,
     storyRequest: setup.storyRequest || undefined,
-    recentStories,
     // Don't suggest a hero named after a listener, or one from a recent story.
-    spark: pickSpark([...setup.children.map((c) => c.name), ...(recentStories ?? [])]),
+    spark: pickSpark([...setup.children.map((c) => c.name), ...(setup.recentHeroes ?? [])]),
     story: {
       characters: [],
       summary: "",
       currentScene: "",
       importantEvents: [],
       childChanges: [],
-      plan: [],
-      recentNarrations: [],
+      beatIndex: 0,
+      narrations: [],
     },
     pacing: {
       targetDurationMinutes: setup.durationMinutes,
@@ -92,8 +90,8 @@ export interface StoryUpdate {
   importantEvent?: string;
   childChange?: string;
   askForResponse: boolean;
-  /** The plot plan, written once in the opening segment. */
-  plan?: string[];
+  /** The model says the current beat has fully happened, so the next segment moves to the next one. */
+  beatDone?: boolean;
   /** The child said they're done / sleepy, so this segment is the ending. */
   childWantsToEnd?: boolean;
 }
@@ -123,8 +121,11 @@ export function applyUpdate(
       childChanges: update.childChange
         ? [...prev.story.childChanges, update.childChange]
         : prev.story.childChanges,
-      plan: prev.story.plan.length ? prev.story.plan : (update.plan ?? []).slice(0, 6),
-      recentNarrations: [...prev.story.recentNarrations, update.narration].slice(-3),
+      plan: prev.story.plan,
+      beatIndex: update.beatDone
+        ? Math.min(prev.story.beatIndex + 1, prev.story.plan?.beats.length ?? Infinity)
+        : prev.story.beatIndex,
+      narrations: [...prev.story.narrations, update.narration].slice(-30),
     },
     pacing: {
       ...prev.pacing,
@@ -141,6 +142,9 @@ export function applyUpdate(
 
   // Advance the phase for the *next* turn based on the new elapsed estimate.
   next.pacing.phase = next.finished ? phaseUsed : phaseForProgress(next);
+  // Once every beat of the plan has happened, the story is told: end it rather than pad it.
+  const beats = next.story.plan?.beats.length ?? 0;
+  if (!next.finished && beats && next.story.beatIndex >= beats) next.pacing.phase = "ending";
   return next;
 }
 

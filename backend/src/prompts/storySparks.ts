@@ -1,6 +1,6 @@
-// Random ingredients that make each night's story different. The model combines one story kind
-// and one surprise with the child's interests, and names the hero from a fresh list, instead of
-// falling back to its favorites ("Nova the cat in a rocket among twinkling stars") every time.
+// Random ingredients that make each night's story different: a story shape (used only when the
+// parent didn't share a concern) and fresh hero names, so the model doesn't fall back to its
+// favorites ("Nova the cat in a rocket among twinkling stars") every time.
 
 import type { StorySpark } from "../../../shared/types";
 
@@ -23,29 +23,6 @@ const KINDS = [
   "a map that shows somewhere nobody has visited",
 ];
 
-const SURPRISES = [
-  "a grumpy cloud who turns out to be shy",
-  "a teapot that can talk but only in rhymes",
-  "a map whose drawings move when no one is looking",
-  "a pair of boots that hop on their own",
-  "a very polite snail who is always in a hurry",
-  "a lighthouse that has forgotten how to glow",
-  "a sock that keeps escaping",
-  "a backwards day where everyone walks backwards",
-  "a tiny dragon with the hiccups",
-  "an umbrella that rains upward",
-  "a giant who is afraid of the dark",
-  "a bridge made of sleeping turtles",
-  "a library where the books whisper hints",
-  "a moose who wants to learn to dance",
-  "a key that opens only things that are smiling",
-  "a puddle that is actually a doorway",
-  "a garden where vegetables tell jokes",
-  "a bicycle with wings that only work when you sing",
-  "a snowman who wants to visit the beach",
-  "a robot who collects interesting sounds",
-];
-
 const HERO_NAMES = [
   "Pip", "Juniper", "Biscuit", "Otto", "Marigold", "Pickle", "Wren", "Bramble", "Tuck", "Hazel",
   "Ziggy", "Clementine", "Barnaby", "Poppy", "Rufus", "Tilly", "Fennel", "Moss", "Peanut", "Ivy",
@@ -64,7 +41,7 @@ function pickNames(count: number, avoid: string[]): string[] {
   return names;
 }
 
-/** @param avoid the listening children's names, plus names from recent stories */
+/** @param avoid the listening children's names, plus hero names from recent stories */
 export function pickSpark(avoid: string[]): StorySpark {
-  return { kind: pick(KINDS), surprise: pick(SURPRISES), heroNames: pickNames(3, avoid) };
+  return { kind: pick(KINDS), heroNames: pickNames(3, avoid) };
 }

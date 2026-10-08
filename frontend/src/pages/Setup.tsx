@@ -130,8 +130,8 @@ export function Setup({ onStart, preselect, providerNote }: Props) {
           profileIds = [lastUsedProfileId()].filter((id): id is string => !!id);
         }
       }
-      // Recent stories these children heard, so tonight's story is different.
-      const recentStories = [
+      // Hero names from these children's recent stories, so tonight's hero is someone new.
+      const recentHeroes = [
         ...new Set(
           loadProfiles()
             .filter((p) => profileIds.includes(p.id))
@@ -141,7 +141,7 @@ export function Setup({ onStart, preselect, providerNote }: Props) {
 
       rememberDuration(duration);
       await onStart(
-        { children, durationMinutes: duration, parentGoal: goal.trim(), storyRequest: request.trim(), recentStories },
+        { children, durationMinutes: duration, parentGoal: goal.trim(), storyRequest: request.trim(), recentHeroes },
         profileIds,
       );
     } catch (err) {
